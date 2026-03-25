@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C.E.O. - Банк | Адмін-панель</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="./logo.png" type="image/png">
+  <style>
+    :root {
+      --primary-color: #4f46e5; --primary-hover: #4338ca; --secondary-color: #10b981;
+      --danger-color: #ef4444; --warning-color: #f59e0b; --background-light: #f9fafb;
+      --background-dark: #1f2937; --sidebar-bg: #111827; --card-bg: #ffffff;
+      --text-light: #9ca3af; --text-dark: #f3f4f6; --text-headings: #111827;
+      --border-light: #e5e7eb; --border-dark: #374151; --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+      --border-radius: 0.75rem;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background-color: var(--background-light); color: var(--text-headings); line-height: 1.6; font-size: 16px; }
+    .login-container-wrapper { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: var(--sidebar-bg); padding: 1rem; }
+    .login-card { background-color: var(--background-dark); padding: 2.5rem; border-radius: var(--border-radius); box-shadow: var(--shadow-md); text-align: center; max-width: 400px; width: 100%; border: 1px solid var(--border-dark); }
+    .login-logo { width: 60px; margin-bottom: 1.5rem; }
+    .login-card h2 { color: var(--text-dark); margin-bottom: 0.5rem; font-size: 1.75rem;}
+    .login-subtitle { color: var(--text-light); margin-bottom: 2rem; }
+    .form-group { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1rem;}
+    input, textarea, select { padding: 0.875rem 1rem; border: 1px solid var(--border-light); border-radius: 0.5rem; background-color: var(--card-bg); color: var(--text-headings); font-size: 1rem; transition: all 0.2s ease; width: 100%; }
+    input:focus, textarea:focus, select:focus { border-color: var(--primary-color); outline: none; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.3); }
+    .styled-button { color: white; padding: 0.875rem 1.5rem; border: none; border-radius: 0.5rem; font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+    .styled-button:hover { transform: translateY(-2px); }
+    .login-btn { background-color: var(--primary-color); }
+    .login-btn:hover { background-color: var(--primary-hover); }
+    .admin-panel { display: flex; min-height: 100vh; }
+    .sidebar { width: 260px; background-color: var(--sidebar-bg); color: var(--text-dark); padding: 1.5rem; position: fixed; height: 100%; overflow-y: auto; display: flex; flex-direction: column; }
+    .sidebar-header { display: flex; align-items: center; gap: 1rem; padding-bottom: 1.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-dark); }
+    .sidebar-logo { width: 40px; height: 40px; }
+    .sidebar-header h2 { font-size: 1.5rem; color: white; }
+    .sidebar-nav { display: flex; flex-direction: column; gap: 0.5rem; flex-grow: 1; }
+    .nav-item { background-color: transparent; color: var(--text-light); padding: 0.75rem 1rem; border-radius: 0.5rem; border: none; text-align: left; cursor: pointer; font-size: 0.95rem; font-weight: 500; display: flex; align-items: center; gap: 0.75rem; transition: all 0.2s ease; }
+    .nav-item:hover { background-color: var(--background-dark); color: white; }
+    .nav-item.active { background-color: var(--primary-color); color: white; font-weight: 600; }
+    .nav-icon { font-size: 1.25rem; width: 24px; text-align: center; }
+    .logout-btn-sidebar { margin-top: auto; background-color: var(--background-dark); }
+    .logout-btn-sidebar:hover { background-color: var(--danger-color); }
+    .main-content { margin-left: 260px; padding: 2rem; flex-grow: 1; }
+    .section { display: none; background-color: var(--card-bg); padding: 2rem; border-radius: var(--border-radius); box-shadow: var(--shadow-md); margin-bottom: 2rem; }
+    .section.active { display: block; }
+    .section-header { font-size: 1.75rem; color: var(--text-headings); margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-light); }
+    .section-subheader { font-size: 1.25rem; color: var(--text-headings); margin-bottom: 1rem; margin-top: 1.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-light); }
+    .data-list { margin-top: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+    .data-item { background-color: #f9fafb; padding: 1rem 1.5rem; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border: 1px solid var(--border-light); transition: all 0.2s ease; }
+    .data-item:hover { border-color: var(--primary-color); transform: translateY(-2px); box-shadow: var(--shadow-md);}
+    .data-item span { font-size: 0.9rem; flex-grow: 1; }
+    .data-item .button-group { display: flex; gap: 0.5rem; }
+    .data-item .styled-button { padding: 0.5rem 1rem; font-size: 0.85rem; }
+    .action-btn { background-color: var(--secondary-color); }
+    .action-btn.warning { background-color: var(--warning-color); }
+    .action-btn.danger { background-color: var(--danger-color); }
+    .action-btn.close-btn { background-color: var(--text-light); }
+    .action-btn:hover { filter: brightness(1.1); }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; padding: 1rem; backdrop-filter: blur(4px); }
+    .modal-content-panel { background-color: var(--card-bg); padding: 2rem; border-radius: var(--border-radius); box-shadow: var(--shadow-md); max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto; }
+    .modal-content-panel h3 { margin-top: 0; color: var(--text-headings); font-size: 1.5rem; }
+    .modal-buttons { display: flex; gap: 1rem; justify-content: flex-end; margin-top: 2rem; flex-wrap: wrap; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-grid .full-width { grid-column: 1 / -1; }
+    hr { margin: 2rem 0; border: 0; border-top: 1px solid var(--border-light); }
+  </style>
+</head>
+<body>
+<div id="login" class="login-container-wrapper">
+  <div class="login-card">
+    <img src="./logo.png" alt="Логотип C.E.O. Банк" class="login-logo">
+    <h2>C.E.O. - Банк</h2>
+    <p class="login-subtitle">Вхід до адмін-панелі</p>
+    <div class="form-group">
+      <input type="text" id="username" placeholder="Логін" autocomplete="username">
+      <input type="password" id="password" placeholder="Пароль" autocomplete="current-password">
+      <button onclick="adminLogin()" class="styled-button login-btn">Увійти</button>
+    </div>
+  </div>
+</div>
+
+<div id="adminPanel" class="admin-panel" style="display: none;">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <img src="./logo.png" alt="Логотип C.E.O. Банк" class="sidebar-logo">
+      <h2>Адмін</h2>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" onclick="showSection('users')"><span class="nav-icon">👥</span> Користувачі</button>
+      <button class="nav-item" onclick="showSection('teams')"><span class="nav-icon">🏆</span> Команди</button>
+      <button class="nav-item" onclick="showSection('shop')"><span class="nav-icon">🛒</span> Магазин</button>
+    </nav>
+    <button class="nav-item styled-button logout-btn-sidebar" onclick="adminLogout()"><span class="nav-icon">🚪</span> Вийти</button>
+  </div>
+
+  <main class="main-content">
+    <div id="users" class="section">
+      <h2 class="section-header">Управління користувачами</h2>
+      <h3 class="section-subheader">Створити користувача</h3>
+      <div class="form-group">
+        <div class="form-grid">
+          <input type="text" id="newFullName" placeholder="Прізвище та ім'я">
+          <input type="text" id="newUsername" placeholder="Логін (унікальний)">
+          <input type="password" id="newPassword" placeholder="Пароль">
+          <input type="number" id="newBalance" placeholder="Початковий баланс (за замовчуванням 100)">
+          <input type="text" id="newDob" placeholder="Дата народження (РРРР-ММ-ДД)">
+        </div>
+        <button onclick="createUser()" class="styled-button action-btn">Створити</button>
+      </div>
+      <hr>
+      <h3 class="section-subheader">Список користувачів</h3>
+      <div id="userList" class="data-list"></div>
+    </div>
+
+    <div id="teams" class="section">
+        <h2 class="section-header">Управління командами</h2>
+        <h3 class="section-subheader">Створити команду</h3>
+        <div class="form-group">
+            <input type="text" id="teamName" placeholder="Назва нової команди">
+            <label for="teamMembers">Оберіть учасників (можна вибрати декілька, затиснувши Ctrl/Cmd):</label>
+            <select id="teamMembers" multiple style="height: 150px;"></select>
+            <button onclick="createTeam()" class="styled-button action-btn">Створити команду</button>
+        </div>
+        <hr>
+        <div class="bulk-action">
+          <h3 class="section-subheader">Масові операції з балансом команди</h3>
+          <select id="bulkTeamSelect"></select>
+          <input type="number" id="bulkAmount" placeholder="Сума">
+          <input type="text" id="bulkComment" placeholder="Коментар до операції">
+          <select id="bulkAction"><option value="add">Нарахувати</option><option value="subtract">Зняти</option></select>
+          <button onclick="bulkAdjustBalance()" class="styled-button action-btn warning">Застосувати до команди</button>
+        </div>
+        <hr>
+        <h3 class="section-subheader">Список команд</h3>
+        <div id="teamList" class="data-list"></div>
+    </div>
+
+    <div id="shop" class="section">
+      <h2 class="section-header">Управління магазином</h2>
+      <h3 class="section-subheader">Додати / Редагувати товар</h3>
+      <div class="form-group">
+        <div class="form-grid">
+          <input class="full-width" type="text" id="itemName" placeholder="Назва товару">
+          <input type="number" id="itemPrice" placeholder="Ціна">
+          <input type="number" id="itemDiscountPrice" placeholder="Ціна зі знижкою (необов'язково)">
+          <input type="number" id="itemQuantity" placeholder="Кількість в наявності">
+          <input class="full-width" type="text" id="itemCategory" placeholder="Категорія">
+          <textarea class="full-width" id="itemDescription" placeholder="Опис"></textarea>
+          <input class="full-width" type="text" id="itemImage" placeholder="Шлях до зображення (напр., ./t1.png)">
+        </div>
+        <button id="addShopItemBtn" onclick="addShopItem()" class="styled-button action-btn">Зберегти товар</button>
+        <button id="clearShopFormBtn" onclick="clearShopForm()" class="styled-button action-btn close-btn" style="display: none;">Скасувати редагування</button>
+      </div>
+      <hr>
+      <h3 class="section-subheader">Список товарів</h3>
+      <div id="shopList" class="data-list"></div>
+    </div>
+
+    <div id="editUserModal" class="modal-overlay">
+      <div class="modal-content-panel">
+        <h3 id="editUserModalTitle">Редагувати користувача</h3>
+        <div class="form-group">
+            <div class="form-grid">
+                <input type="text" id="editFullName" placeholder="Прізвище та ім'я">
+                <input type="text" id="editUsername" placeholder="Логін">
+            </div>
+          <input type="text" id="editDob" placeholder="Дата народження (РРРР-ММ-ДД)">
+          <input type="number" id="editBalance" placeholder="Баланс">
+          <input type="password" id="editPassword" placeholder="Новий пароль (залиште порожнім, щоб не змінювати)">
+          <label for="editTeam">Команда:</label>
+          <select id="editTeam"></select>
+          <label style="display: flex; align-items: center; gap: 0.5rem;"><input type="checkbox" id="editBlocked"> Заблокувати користувача</label>
+        </div>
+        <hr>
+        <div class="form-group">
+          <h4>Зміна балансу</h4>
+          <input type="number" id="adjustAmount" placeholder="Сума (+/-)">
+          <input type="text" id="adjustComment" placeholder="Коментар до транзакції">
+          <button onclick="adjustBalance()" class="styled-button action-btn warning">Змінити баланс</button>
+        </div>
+        <div class="modal-buttons">
+          <button onclick="saveUserChanges()" class="styled-button action-btn">Зберегти</button>
+          <button onclick="closeModal('editUserModal')" class="styled-button action-btn close-btn">Закрити</button>
+        </div>
+      </div>
+    </div>
+    <section class="admin-section">
+    <h2>Керування базою даних</h2>
+    <div style="display: flex; gap: 10px; margin-top: 15px;">
+        <button id="downloadDbBtn" class="btn">📥 Завантажити БД (Скачати)</button>
+    </div>
+</section>
+
+  </main>
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>

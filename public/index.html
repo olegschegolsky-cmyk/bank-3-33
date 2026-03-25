@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>C.E.O. - Банк</title>
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="./logo.png" type="image/png">
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator/qrcode.js"></script>
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body>
+
+<div class="header" id="menu" style="display: none;">
+  <div class="header-left">
+    <img src="./logo.png" alt="Логотип C.E.O. Банк" class="header-logo">
+    <h1 id="greeting">Вітаємо!</h1>
+  </div>
+  <div class="header-right">
+    <button class="logout-btn" onclick="logout()">Вийти</button>
+  </div>
+</div>
+
+<div class="container">
+  <div id="login" class="login-section">
+    <img src="./logo.png" alt="Логотип C.E.O. Банк" class="login-logo">
+    <h2>Вхід до C.E.O. Банку</h2>
+    <p class="login-subtitle">Ваш надійний фінансовий партнер</p>
+    <div class="form-group">
+      <div class="input-container">
+        <input required type="text" id="username" class="styled-input" placeholder=" ">
+        <label class="input-label">Логін (напр., user1)</label> </div>
+      <div class="input-container">
+        <input required type="password" id="password" class="styled-input" placeholder=" ">
+        <label class="input-label">Пароль</label>
+      </div>
+      <button class="action-button primary-button" onclick="login()">Увійти</button>
+    </div>
+  </div>
+
+  <div id="app-content" style="display: none;">
+    <div id="profile" class="profile-section">
+      <div class="card-container">
+        <div class="card" onclick="flipCard()" role="button" tabindex="0" aria-label="Натисніть, щоб перевернути картку">
+          <div class="card-front">
+            <div class="card-header">
+              <img src="./logo.png" alt="Логотип Банку" class="card-logo">
+              <span class="card-type">PREMIUM</span>
+            </div>
+            <div class="card-chip"></div>
+            <div class="card-number">5351 3738 6382 4985</div>
+            <div class="card-details-front">
+              <div>
+                <span class="card-label">Власник</span>
+                <span class="card-value" id="userName">Ім'я Прізвище</span>
+              </div>
+              <div>
+                <span class="card-label">Дійсна до</span>
+                <span class="card-value">10/28</span>
+              </div>
+            </div>
+          </div>
+          <div class="card-back">
+            <div class="magnetic-strip"></div>
+            <div class="card-back-details" style="justify-content: flex-end;">
+              <div class="signature-strip">
+                <span class="card-cvv" id="cvvCode">***</span>
+              </div>
+            </div>
+            <p class="card-info-text">Ця картка є власністю C.E.O. Банку.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="balance-display">
+        <span class="balance-amount" id="balance">0.00</span>
+        <span class="balance-currency">грн</span>
+      </div>
+    </div>
+
+    <div class="quick-actions-grid" style="grid-template-columns: repeat(3, 1fr);">
+      <button class="action-card" onclick="showSendMoney()">
+        <span class="action-icon">💸</span>
+        <span class="action-label">Переказ</span>
+      </button>
+      <button class="action-card" onclick="showShop()">
+        <span class="action-icon">🛍️</span>
+        <span class="action-label">Магазин</span>
+      </button>
+      <button class="action-card" onclick="showLeaderboard()">
+        <span class="action-icon">🏆</span>
+        <span class="action-label">Рейтинг</span>
+      </button>
+    </div>
+
+    <div id="transactions" class="transactions-section">
+      <h3>Історія транзакцій</h3>
+      <div id="transactionList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-nav" id="bottom-bar" style="display: none;">
+  <button class="nav-btn active" onclick="showMainScreen()">
+    <span class="nav-icon">🏠</span>
+    <span class="nav-label">Головна</span>
+  </button>
+  <button class="nav-btn" onclick="showShop()">
+    <span class="nav-icon">🛍️</span>
+    <span class="nav-label">Магазин</span>
+  </button>
+  <button class="nav-btn" onclick="showPersonalInfo()">
+    <span class="nav-icon">👤</span>
+    <span class="nav-label">Профіль</span>
+  </button>
+</div>
+
+<div id="personalModal" class="modal">
+  <div class="modal-content">
+    <span class="modal-close-btn" onclick="closeModal('personalModal')" aria-label="Закрити">×</span>
+    <h3>Цифровий Паспорт 3:33</h3>
+    <div class="passport-container">
+      <div class="passport-card-display">
+        <div class="passport-header-display">
+          <h4>ЦИФРОВИЙ ПАСПОРТ 3:33</h4>
+        </div>
+        <div class="passport-body-display">
+          <div class="passport-details-display">
+            <p><strong>Прізвище та ім'я:</strong> <span id="passportName"></span></p>
+            <p><strong>Дата народження:</strong> <span id="passportDOB"></span></p>
+            <p><strong>Команда:</strong> <span id="passportTeam"></span></p>
+          </div>
+        </div>
+      </div>
+      <div class="profile-actions">
+        <button class="action-button secondary-button" onclick="showQrCodeModal()">Мій QR-код</button>
+        <button class="action-button secondary-button" onclick="showEventHistoryModal()">Історія покупок</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="leaderboardModal" class="modal">
+  <div class="modal-content">
+    <span class="modal-close-btn" onclick="closeModal('leaderboardModal')" aria-label="Закрити">×</span>
+    <h3>🏆 Рейтинг банку</h3>
+    <div id="leaderboardList" class="tasks-list-container"></div>
+  </div>
+</div>
+
+<div id="sendMoneyModal" class="modal">
+  <div class="modal-content">
+    <span class="modal-close-btn" onclick="closeModal('sendMoneyModal')" aria-label="Закрити">×</span>
+    <h3>Переказ коштів</h3>
+    <div class="balance-summary">💰 Баланс: <span id="balanceSendMoney">0.00</span> грн</div>
+    <div id="qr-reader" style="width: 100%; margin-bottom: 1rem; border-radius: var(--border-radius-md); overflow: hidden;"></div>
+    <div id="qr-reader-results" style="display:none;"></div>
+    <div class="form-group">
+      <input type="number" id="sendAmount" placeholder="Сума" class="styled-input">
+      <input type="text" id="sendTo" placeholder="Логін отримувача (напр., user5)" class="styled-input"> <button class="action-button secondary-button" onclick="startQrScanner()">Сканувати QR</button>
+      <button class="action-button primary-button" onclick="confirmSendMoney()">Надіслати</button>
+    </div>
+  </div>
+</div>
+
+<div id="shopModal" class="modal">
+  <div class="modal-content shop-modal-content">
+    <div class="shop-header-controls">
+      <h3>🛍️ Магазин</h3>
+      <div class="header-buttons-group">
+        <button class="action-button cart-button" onclick="showCart()">🛒 (<span id="cartCountModal">0</span>)</button>
+      </div>
+      <span class="modal-close-btn shop-close-btn" onclick="closeModal('shopModal')" aria-label="Закрити">×</span>
+    </div>
+    <div class="balance-summary shop-balance">💰 Баланс: <span id="balanceShop">0.00</span> грн</div>
+    <div class="shop-filters-controls">
+      <select id="shopSort" onchange="sortShopItems()" class="styled-select">
+        <option value="default">Сортувати за популярністю</option>
+        <option value="price-low">Ціна: спочатку дешевші</option>
+        <option value="price-high">Ціна: спочатку дорожчі</option>
+      </select>
+    </div>
+    <div class="shop-items-grid" id="shopItems"></div>
+  </div>
+</div>
+
+<div id="cartModal" class="modal">
+  <div class="modal-content">
+    <span class="modal-close-btn" onclick="closeModal('cartModal')" aria-label="Закрити">×</span>
+    <h3>🛒 Ваш кошик</h3>
+    <div id="cartItems"></div>
+    <div class="cart-summary">
+      <p>Сума: <span id="cartSubtotal">0.00</span> грн</p>
+      <p id="cartTotal" class="cart-total-amount">Всього: 0.00 грн</p>
+    </div>
+    <div class="form-group">
+      <button class="action-button primary-button" onclick="checkoutCart()">Оформити покупку</button>
+    </div>
+  </div>
+</div>
+
+<div id="qrCodeModal" class="modal">
+  <div class="modal-content">
+    <span class="modal-close-btn" onclick="closeModal('qrCodeModal')">×</span>
+    <h3>Мій QR-код для переказів</h3>
+    <div id="qrcode-display" style="display: flex; justify-content: center; padding: 1rem; background: white; border-radius: var(--border-radius-md);"></div>
+    <p class="login-subtitle">Покажіть цей код, щоб отримати переказ.</p>
+  </div>
+</div>
+
+<div id="eventHistoryModal" class="modal">
+  <div class="modal-content">
+    <span class="modal-close-btn" onclick="closeModal('eventHistoryModal')" aria-label="Закрити">×</span>
+    <h3>📜 Історія покупок та переказів</h3>
+    <div id="eventHistoryList" class="tasks-list-container"></div>
+  </div>
+</div>
+
+<div id="confirmModal" class="modal">
+  <div class="modal-content">
+    <span class="modal-close-btn" onclick="closeModal('confirmModal')" aria-label="Закрити">×</span>
+    <h3>Підтвердження</h3>
+    <p id="confirmMessage" class="confirm-text">Ви впевнені?</p>
+    <div class="form-group confirm-buttons">
+      <button class="action-button primary-button" onclick="executeConfirmedAction()">Так</button>
+      <button class="action-button secondary-button" onclick="closeModal('confirmModal')">Ні</button>
+    </div>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
