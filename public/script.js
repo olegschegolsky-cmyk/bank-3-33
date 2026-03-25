@@ -157,7 +157,9 @@ function updateTransactionHistoryDisplay() {
   }
   
   const grouped = appData.transactions.reduce((acc, t) => {
-    const dateKey = new Date(t.timestamp).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
+    // Фікс часового поясу (додаємо Z)
+    const txDate = new Date(t.timestamp.replace(' ', 'T') + 'Z');
+    const dateKey = txDate.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
     if (!acc[dateKey]) acc[dateKey] = [];
     acc[dateKey].push(t);
     return acc;
@@ -167,13 +169,15 @@ function updateTransactionHistoryDisplay() {
     <div class="transaction-date-group">${dateKey}</div>
     ${grouped[dateKey].map(t => {
         const isPositive = t.amount > 0;
+        // Фікс часового поясу (додаємо Z)
+        const txDate = new Date(t.timestamp.replace(' ', 'T') + 'Z');
         return `
             <div class="transaction-item">
                 <div class="transaction-icon">${getTransactionIconByType(t.type)}</div>
                 <div class="transaction-info">
                     <span class="transaction-action">${getTransactionTitle(t)}</span>
                     <span class="transaction-comment">${t.comment}</span>
-                    <span class="transaction-time">${new Date(t.timestamp).toLocaleTimeString('uk-UA')}</span>
+                    <span class="transaction-time">${txDate.toLocaleTimeString('uk-UA')}</span>
                 </div>
                 <span class="transaction-amount ${isPositive ? 'positive' : 'negative'}">
                     ${isPositive ? '+' : ''}${parseFloat(t.amount).toFixed(2)}
@@ -439,13 +443,16 @@ function showEventHistoryModal() {
     if (events.length === 0) {
         list.innerHTML = '<p class="no-transactions">Історія порожня.</p>';
     } else {
-        list.innerHTML = events.map(t => `
+        list.innerHTML = events.map(t => {
+            // Фікс часового поясу (додаємо Z)
+            const txDate = new Date(t.timestamp.replace(' ', 'T') + 'Z');
+            return `
         <div class="event-item ${t.type}">
             <h4>${getTransactionTitle(t)}</h4>
             <p><strong>Сума:</strong> ${parseFloat(t.amount).toFixed(2)} грн</p>
-            <p><strong>Дата:</strong> ${new Date(t.timestamp).toLocaleString('uk-UA')}</p>
+            <p><strong>Дата:</strong> ${txDate.toLocaleString('uk-UA')}</p>
         </div>
-        `).join('');
+        `}).join('');
     }
     openModal('eventHistoryModal');
 }
