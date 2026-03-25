@@ -235,7 +235,8 @@ async function confirmSendMoney() {
 
 // --- Deposits Functions ---
 function showDepositModal() {
-    document.getElementById('depositAmount').value = '';
+    const amountInput = document.getElementById('depositAmount');
+    if (amountInput) amountInput.value = '';
     renderDeposits();
     openModal('depositModal');
 }
@@ -262,13 +263,13 @@ function confirmDeposit() {
 
 function renderDeposits() {
     const list = document.getElementById('userDepositsList');
+    if (!list) return;
     if(!appData.deposits || appData.deposits.length === 0) {
         list.innerHTML = '<p class="no-transactions" style="padding:1rem;">У вас ще немає депозитів.</p>';
         return;
     }
     const now = new Date();
     list.innerHTML = appData.deposits.map(d => {
-        // SQLite UTC date to JS local date
         const endTimeStr = d.end_time.replace(' ', 'T') + 'Z'; 
         const endTime = new Date(endTimeStr);
         const isMature = now >= endTime;
