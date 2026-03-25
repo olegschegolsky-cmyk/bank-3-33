@@ -225,7 +225,6 @@ input:-webkit-autofill + .input-label {
   text-align: center; 
   text-shadow: 0 2px 4px rgba(0,0,0,0.5); 
 }
-/* Fix for iOS Safari auto-linking numbers */
 .card-number, .card-number a {
   color: #ffffff !important;
   text-decoration: none !important;
@@ -257,9 +256,10 @@ input:-webkit-autofill + .input-label {
 .balance-amount { font-size: 3rem; font-weight: 700; color: var(--text-primary); }
 .balance-currency { font-size: 1.5rem; color: var(--text-secondary); margin-left: 0.25rem; }
 
+/* Змінено на 2 колонки для 4 кнопок (квадрат) */
 .quick-actions-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem;
   margin-bottom: 2rem;
 }

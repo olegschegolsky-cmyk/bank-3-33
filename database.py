@@ -28,7 +28,6 @@ def simple_hash(s: str) -> str:
     return str(hash_val)
 
 def initialize_db():
-    print('Initializing database schema...')
     db = get_db()
     cursor = db.cursor()
     
@@ -72,6 +71,17 @@ def initialize_db():
             description TEXT,
             image TEXT,
             popularity INTEGER DEFAULT 0
+        );
+        
+        CREATE TABLE IF NOT EXISTS deposits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            expected_payout REAL NOT NULL,
+            start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+            end_time DATETIME NOT NULL,
+            status TEXT DEFAULT 'active',
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         );
     """)
 
@@ -138,7 +148,6 @@ def initialize_db():
             )
             
     db.commit()
-    print('Database initialized successfully.')
 
 initialize_db()
 
@@ -177,17 +186,19 @@ def get_app_data(user_id: int):
         ORDER BY u.balance DESC
     ''').fetchall()
     
+    deposits = db.execute('SELECT * FROM deposits WHERE user_id = ? ORDER BY start_time DESC', (user_id,)).fetchall()
+    
     return {
         "currentUser": dict(current_user) if current_user else None,
         "transactions": [dict(t) for t in transactions],
         "shopItems": [dict(i) for i in shop_items],
-        "leaderboard": [dict(l) for l in leaderboard]
+        "leaderboard": [dict(l) for l in leaderboard],
+        "deposits": [dict(d) for d in deposits]
     }
 
 def perform_transfer(from_user_id: int, to_user_id: int, amount: float, comment: str):
     db = get_db()
     cursor = db.cursor()
-    
     try:
         cursor.execute('BEGIN TRANSACTION')
         from_user = cursor.execute('SELECT balance, full_name FROM users WHERE id = ?', (from_user_id,)).fetchone()
@@ -202,16 +213,8 @@ def perform_transfer(from_user_id: int, to_user_id: int, amount: float, comment:
         to_user_name = cursor.execute('SELECT full_name FROM users WHERE id = ?', (to_user_id,)).fetchone()['full_name']
         from_user_name = from_user['full_name']
         
-        cursor.execute('''
-            INSERT INTO transactions (user_id, type, amount, counterparty, comment) 
-            VALUES (?, ?, ?, ?, ?)
-        ''', (from_user_id, 'transfer', -amount, to_user_name, comment))
-        
-        cursor.execute('''
-            INSERT INTO transactions (user_id, type, amount, counterparty, comment) 
-            VALUES (?, ?, ?, ?, ?)
-        ''', (to_user_id, 'transfer', amount, from_user_name, comment))
-        
+        cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (from_user_id, 'transfer', -amount, to_user_name, comment))
+        cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (to_user_id, 'transfer', amount, from_user_name, comment))
         db.commit()
         return {"success": True, "message": "Переказ успішний"}
     except Exception as e:
@@ -221,16 +224,90 @@ def perform_transfer(from_user_id: int, to_user_id: int, amount: float, comment:
 def adjust_balance(user_id: int, amount: float, comment: str, admin_name: str):
     db = get_db()
     cursor = db.cursor()
-    
     try:
         cursor.execute('BEGIN TRANSACTION')
         cursor.execute('UPDATE users SET balance = balance + ? WHERE id = ?', (amount, user_id))
-        cursor.execute('''
-            INSERT INTO transactions (user_id, type, amount, counterparty, comment) 
-            VALUES (?, ?, ?, ?, ?)
-        ''', (user_id, 'admin_adjustment', amount, admin_name, comment))
+        cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (user_id, 'admin_adjustment', amount, admin_name, comment))
         db.commit()
         return {"success": True}
+    except Exception as e:
+        db.rollback()
+        raise e
+
+def create_deposit(user_id: int, amount: float, days: int):
+    rates = {1: 0.07, 2: 0.15, 3: 0.24, 4: 0.34, 5: 0.45}
+    if days not in rates:
+        return {"success": False, "message": "Недопустимий термін депозиту."}
+    if amount <= 0:
+        return {"success": False, "message": "Сума має бути більшою за 0."}
+        
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute('BEGIN TRANSACTION')
+        user = cursor.execute('SELECT balance FROM users WHERE id = ?', (user_id,)).fetchone()
+        if user['balance'] < amount:
+            db.rollback()
+            return {"success": False, "message": "Недостатньо коштів для відкриття депозиту."}
+            
+        payout = amount + (amount * rates[days])
+        
+        cursor.execute('UPDATE users SET balance = balance - ? WHERE id = ?', (amount, user_id))
+        cursor.execute('''
+            INSERT INTO deposits (user_id, amount, expected_payout, end_time) 
+            VALUES (?, ?, ?, datetime('now', ?))
+        ''', (user_id, amount, payout, f'+{days} days'))
+        
+        cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (user_id, 'deposit', -amount, 'Банк', f'Депозит на {days} дн.'))
+        db.commit()
+        return {"success": True, "message": "Кошти успішно розміщено на депозиті."}
+    except Exception as e:
+        db.rollback()
+        raise e
+
+def claim_deposit(user_id: int, deposit_id: int):
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute('BEGIN TRANSACTION')
+        dep = cursor.execute("SELECT * FROM deposits WHERE id = ? AND user_id = ? AND status = 'active'", (deposit_id, user_id)).fetchone()
+        if not dep:
+            db.rollback()
+            return {"success": False, "message": "Депозит не знайдено або вже закрито."}
+            
+        is_mature = cursor.execute("SELECT datetime('now') >= ?", (dep['end_time'],)).fetchone()[0]
+        if not is_mature:
+            db.rollback()
+            return {"success": False, "message": "Час депозиту ще не вийшов."}
+            
+        payout = dep['expected_payout']
+        cursor.execute("UPDATE deposits SET status = 'completed' WHERE id = ?", (deposit_id,))
+        cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (payout, user_id))
+        cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (user_id, 'deposit_payout', payout, 'Банк', 'Виплата з депозиту'))
+        db.commit()
+        return {"success": True, "message": f"Виплата {payout:.2f} грн зарахована!"}
+    except Exception as e:
+        db.rollback()
+        raise e
+
+def admin_cancel_deposit(deposit_id: int, admin_name: str):
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute('BEGIN TRANSACTION')
+        dep = cursor.execute("SELECT * FROM deposits WHERE id = ? AND status = 'active'", (deposit_id,)).fetchone()
+        if not dep:
+            db.rollback()
+            return {"success": False, "message": "Депозит не знайдено або не активний."}
+            
+        user_id = dep['user_id']
+        amount = dep['amount']
+        
+        cursor.execute("UPDATE deposits SET status = 'cancelled' WHERE id = ?", (deposit_id,))
+        cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (amount, user_id))
+        cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (user_id, 'admin_adjustment', amount, admin_name, 'Скасування депозиту адміном'))
+        db.commit()
+        return {"success": True, "user_id": user_id}
     except Exception as e:
         db.rollback()
         raise e

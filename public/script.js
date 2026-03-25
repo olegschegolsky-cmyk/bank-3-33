@@ -2,7 +2,7 @@ const PROD_URL = 'bank-3-33-production.up.railway.app';
 const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : `https://${PROD_URL}`;
 const WS_BASE_URL = window.location.hostname === 'localhost' ? 'ws://localhost:3001/ws' : `wss://${PROD_URL}/ws`;
 
-let appData = { currentUser: null, transactions: [], shopItems: [], leaderboard: [] };
+let appData = { currentUser: null, transactions: [], shopItems: [], leaderboard: [], deposits: [] };
 let cart = [];
 let ws = null;
 let html5QrCode = null;
@@ -123,6 +123,9 @@ async function loadInitialData() {
     appData = await response.json();
     cart = JSON.parse(localStorage.getItem(`cart_${appData.currentUser.id}`)) || [];
     updateAllDisplays();
+    if(document.getElementById('depositModal').style.display === 'flex') {
+        renderDeposits();
+    }
   } catch (error) {
     console.error('Failed to load data:', error);
   }
@@ -136,7 +139,7 @@ function updateAllDisplays(){
   document.getElementById('userName').textContent = user.full_name;
   
   const balanceValue = (user.balance || 0).toFixed(2);
-  ['balance', 'balanceSendMoney', 'balanceShop'].forEach(id => {
+  ['balance', 'balanceSendMoney', 'balanceShop', 'balanceDeposit'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.textContent = balanceValue;
   });
@@ -181,6 +184,7 @@ function updateTransactionHistoryDisplay() {
 }
 
 function getTransactionIconByType(type) {
+    if (type.includes('deposit')) return '🏦';
     if (type.includes('transfer')) return '💸';
     if (type.includes('purchase')) return '🛍️';
     if (type.includes('admin')) return '⚙️';
@@ -191,6 +195,8 @@ function getTransactionTitle(t) {
     if (t.type === 'transfer') return t.amount > 0 ? `Отримано від ${t.counterparty}` : `Переказ до ${t.counterparty}`;
     if (t.type === 'purchase') return 'Покупка в магазині';
     if (t.type === 'admin_adjustment') return t.amount > 0 ? 'Поповнення' : 'Зняття';
+    if (t.type === 'deposit') return 'Розміщення на депозит';
+    if (t.type === 'deposit_payout') return 'Виплата з депозиту';
     return 'Операція';
 }
 
@@ -226,6 +232,77 @@ async function confirmSendMoney() {
     };
     openModal('confirmModal');
 }
+
+// --- Deposits Functions ---
+function showDepositModal() {
+    document.getElementById('depositAmount').value = '';
+    renderDeposits();
+    openModal('depositModal');
+}
+
+function confirmDeposit() {
+    const amount = parseFloat(document.getElementById('depositAmount').value);
+    const days = parseInt(document.getElementById('depositDays').value);
+    if (isNaN(amount) || amount <= 0) return alert('Введіть коректну суму.');
+    document.getElementById('confirmMessage').textContent = `Відкрити депозит на ${amount.toFixed(2)} грн терміном на ${days} дн.? Кошти будуть заморожені.`;
+    confirmedActionCallback = async () => {
+        try {
+            const response = await fetchWithAuth('/api/deposits', {
+                method: 'POST', body: JSON.stringify({ amount, days })
+            });
+            const result = await response.json();
+            alert(result.message);
+            if(response.ok) {
+                closeModal('confirmModal');
+            }
+        } catch(e) { alert('Помилка відкриття депозиту.'); }
+    };
+    openModal('confirmModal');
+}
+
+function renderDeposits() {
+    const list = document.getElementById('userDepositsList');
+    if(!appData.deposits || appData.deposits.length === 0) {
+        list.innerHTML = '<p class="no-transactions" style="padding:1rem;">У вас ще немає депозитів.</p>';
+        return;
+    }
+    const now = new Date();
+    list.innerHTML = appData.deposits.map(d => {
+        // SQLite UTC date to JS local date
+        const endTimeStr = d.end_time.replace(' ', 'T') + 'Z'; 
+        const endTime = new Date(endTimeStr);
+        const isMature = now >= endTime;
+        
+        let statusHtml = '';
+        if(d.status === 'completed') {
+            statusHtml = `<span style="color:var(--accent-color); font-weight:600;">Завершено</span>`;
+        } else if(d.status === 'cancelled') {
+            statusHtml = `<span style="color:var(--danger-color); font-weight:600;">Скасовано (кошти повернуто)</span>`;
+        } else if(isMature) {
+            statusHtml = `<button class="action-button primary-button" style="padding:0.6rem; width:100%; margin-top:0.5rem;" onclick="claimDeposit(${d.id})">Забрати ${d.expected_payout.toFixed(2)} грн</button>`;
+        } else {
+            statusHtml = `<span style="color:var(--warning-color); font-weight:600;">В процесі (до ${endTime.toLocaleString('uk-UA')})</span>`;
+        }
+        
+        return `
+        <div class="event-item" style="border-left-color: ${d.status === 'active' ? 'var(--warning-color)' : d.status === 'completed' ? 'var(--accent-color)' : 'var(--text-disabled)'};">
+            <h4 style="margin-bottom:0.25rem;">Сума: ${d.amount.toFixed(2)} грн</h4>
+            <p>Очікувана виплата: <strong>${d.expected_payout.toFixed(2)} грн</strong></p>
+            <div style="margin-top:0.5rem">${statusHtml}</div>
+        </div>`;
+    }).join('');
+}
+
+async function claimDeposit(id) {
+    try {
+        const response = await fetchWithAuth('/api/deposits/claim', {
+            method: 'POST', body: JSON.stringify({ depositId: id })
+        });
+        const result = await response.json();
+        alert(result.message);
+    } catch(e) { alert('Помилка виплати.'); }
+}
+// -------------------------
 
 function showShop() {
     populateShopItems();
@@ -357,7 +434,7 @@ function showPersonalInfo() {
 
 function showEventHistoryModal() {
     const list = document.getElementById('eventHistoryList');
-    const events = appData.transactions.filter(t => t.type === 'purchase' || t.type === 'transfer');
+    const events = appData.transactions.filter(t => t.type === 'purchase' || t.type === 'transfer' || t.type === 'deposit_payout' || t.type === 'deposit');
     if (events.length === 0) {
         list.innerHTML = '<p class="no-transactions">Історія порожня.</p>';
     } else {
@@ -432,6 +509,7 @@ async function showSection(sectionId) {
         case 'users': await loadAdminUsers(); break;
         case 'teams': await loadAdminTeamsAndUsers(); break;
         case 'shop': await loadAdminShop(); break;
+        case 'deposits': await loadAdminDeposits(); break;
     }
 }
 
@@ -619,6 +697,42 @@ function clearShopForm() {
     document.getElementById('clearShopFormBtn').style.display = 'none';
 }
 
+// Admin Deposits
+async function loadAdminDeposits() {
+    const response = await fetchWithAuth('/api/admin/deposits');
+    const deps = await response.json();
+    const list = document.getElementById('adminDepositsList');
+    if(deps.length === 0) { 
+        list.innerHTML = '<p class="no-transactions" style="padding: 1rem;">Немає активних депозитів.</p>'; 
+        return; 
+    }
+    
+    list.innerHTML = deps.map(d => {
+        const endTimeStr = d.end_time.replace(' ', 'T') + 'Z';
+        const date = new Date(endTimeStr).toLocaleString('uk-UA');
+        return `
+        <div class="data-item">
+            <span><strong>${d.full_name}</strong> | ${d.amount.toFixed(2)} грн -> <strong>${d.expected_payout.toFixed(2)} грн</strong> | До: ${date}</span>
+            <div class="button-group">
+                <button onclick="adminCancelDeposit(${d.id})" class="styled-button action-btn danger">Скасувати</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function adminCancelDeposit(id) {
+    if(!confirm('Ви впевнені, що хочете скасувати цей депозит? Кошти повернуться користувачу без відсотків.')) return;
+    const response = await fetchWithAuth('/api/admin/deposits/cancel', {
+        method: 'POST', body: JSON.stringify({ depositId: id })
+    });
+    if(response.ok) {
+        alert('Депозит скасовано.');
+        showSection('deposits');
+    } else {
+        alert('Помилка скасування.');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const token = localStorage.getItem('authToken');
     const isAdmin = localStorage.getItem('isAdmin') === 'true';
@@ -645,6 +759,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const downloadDbBtn = document.getElementById('downloadDbBtn');
+    const uploadDbBtn = document.getElementById('uploadDbBtn');
+    const uploadDbInput = document.getElementById('uploadDbInput');
 
     if (downloadDbBtn) {
         downloadDbBtn.addEventListener('click', () => {
@@ -664,6 +780,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.URL.revokeObjectURL(url);
             })
             .catch(err => alert(err.message));
+        });
+    }
+
+    if (uploadDbBtn && uploadDbInput) {
+        uploadDbBtn.addEventListener('click', () => uploadDbInput.click());
+        uploadDbInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (!confirm('Увага! Це повністю замінить поточну базу даних. Продовжити?')) {
+                uploadDbInput.value = ''; return;
+            }
+            const formData = new FormData();
+            formData.append('file', file);
+            fetch('/api/admin/db/upload', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) { alert('Базу даних успішно оновлено!'); location.reload(); } 
+                else { alert('Помилка: ' + data.message); }
+            })
+            .catch(err => alert('Помилка завантаження файлу на сервер'))
+            .finally(() => uploadDbInput.value = '');
         });
     }
 });

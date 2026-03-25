@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Header
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Header, UploadFile, File
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -7,6 +7,7 @@ from typing import List, Optional, Dict
 import jwt
 import database
 import asyncio
+import shutil
 
 JWT_SECRET = 'your_super_secret_key_for_ceo_bank_project'
 
@@ -120,7 +121,7 @@ class TransferData(BaseModel):
     comment: str = "Приватний переказ"
 
 @app.post("/api/transfer")
-def transfer(data: TransferData, user: dict = Depends(get_current_user)):
+async def transfer(data: TransferData, user: dict = Depends(get_current_user)):
     if data.amount <= 0:
         return JSONResponse(status_code=400, content={"message": "Некоректні дані для переказу."})
     recipient = database.find_user_by_login(data.recipientFullName)
@@ -131,9 +132,60 @@ def transfer(data: TransferData, user: dict = Depends(get_current_user)):
     
     result = database.perform_transfer(user["id"], recipient["id"], data.amount, data.comment)
     if result["success"]:
-        asyncio.run(manager.broadcast({"type": "full_update_required"}, [user["id"], recipient["id"]]))
+        await manager.broadcast({"type": "full_update_required"}, [user["id"], recipient["id"]])
         return {"success": True, "message": result["message"]}
     return JSONResponse(status_code=400, content={"message": result["message"]})
+
+# --- Deposits Endpoints ---
+class DepositData(BaseModel):
+    amount: float
+    days: int
+
+@app.post("/api/deposits")
+async def create_deposit(data: DepositData, user: dict = Depends(get_current_user)):
+    res = database.create_deposit(user["id"], data.amount, data.days)
+    if res["success"]:
+        await manager.broadcast({"type": "full_update_required"}, [user["id"]])
+        return {"success": True, "message": res["message"]}
+    return JSONResponse(status_code=400, content={"message": res["message"]})
+
+class ClaimDepositData(BaseModel):
+    depositId: int
+
+@app.post("/api/deposits/claim")
+async def claim_deposit(data: ClaimDepositData, user: dict = Depends(get_current_user)):
+    res = database.claim_deposit(user["id"], data.depositId)
+    if res["success"]:
+        await manager.broadcast({"type": "full_update_required"}, [user["id"]])
+        return {"success": True, "message": res["message"]}
+    return JSONResponse(status_code=400, content={"message": res["message"]})
+
+@app.get("/api/admin/deposits")
+def admin_get_deposits(user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    deps = db.execute('''
+        SELECT d.*, u.full_name 
+        FROM deposits d
+        JOIN users u ON d.user_id = u.id
+        WHERE d.status = 'active'
+        ORDER BY d.start_time DESC
+    ''').fetchall()
+    return [dict(d) for d in deps]
+
+class CancelDepositData(BaseModel):
+    depositId: int
+
+@app.post("/api/admin/deposits/cancel")
+async def admin_cancel_deposit(data: CancelDepositData, user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    res = database.admin_cancel_deposit(data.depositId, user['full_name'])
+    if res['success']:
+        await manager.broadcast({"type": "admin_panel_update_required"})
+        await manager.broadcast({"type": "full_update_required"}, [res['user_id']])
+        return {"success": True}
+    return JSONResponse(status_code=400, content={"message": res['message']})
+# -------------------------
 
 class CartItem(BaseModel):
     id: int
@@ -143,7 +195,7 @@ class PurchaseData(BaseModel):
     cart: List[CartItem]
 
 @app.post("/api/purchase")
-def purchase(data: PurchaseData, user: dict = Depends(get_current_user)):
+async def purchase(data: PurchaseData, user: dict = Depends(get_current_user)):
     if not data.cart:
         return JSONResponse(status_code=400, content={"message": "Кошик порожній."})
     
@@ -173,8 +225,8 @@ def purchase(data: PurchaseData, user: dict = Depends(get_current_user)):
                        (user["id"], "purchase", -total_cost, "Магазин", f"Покупка {len(data.cart)} товарів"))
         db.commit()
         
-        asyncio.run(manager.broadcast({"type": "full_update_required"}, [user["id"]]))
-        asyncio.run(manager.broadcast({"type": "shop_update_required"}))
+        await manager.broadcast({"type": "full_update_required"}, [user["id"]])
+        await manager.broadcast({"type": "shop_update_required"})
         return {"success": True, "message": f"Покупку на суму {total_cost:.2f} грн успішно оформлено."}
     except Exception as e:
         db.rollback()
@@ -200,14 +252,14 @@ class UserCreateData(BaseModel):
     balance: float = 100
 
 @app.post("/api/admin/users")
-def admin_create_user(data: UserCreateData, user: dict = Depends(get_current_user)):
+async def admin_create_user(data: UserCreateData, user: dict = Depends(get_current_user)):
     db = database.get_db()
     try:
         cursor = db.cursor()
         cursor.execute('INSERT INTO users (username, password_hash, full_name, dob, balance) VALUES (?, ?, ?, ?, ?)',
                        (data.username, database.simple_hash(data.password), data.fullName, data.dob, data.balance))
         db.commit()
-        asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
+        await manager.broadcast({"type": "admin_panel_update_required"})
         return JSONResponse(status_code=201, content={"id": cursor.lastrowid})
     except database.sqlite3.IntegrityError:
         return JSONResponse(status_code=409, content={"message": "Користувач з таким логіном вже існує."})
@@ -222,7 +274,7 @@ class UserUpdateData(BaseModel):
     password: Optional[str] = None
 
 @app.put("/api/admin/users/{user_id}")
-def admin_update_user(user_id: int, data: UserUpdateData, user: dict = Depends(get_current_user)):
+async def admin_update_user(user_id: int, data: UserUpdateData, user: dict = Depends(get_current_user)):
     db = database.get_db()
     sql = 'UPDATE users SET username = ?, full_name = ?, dob = ?, balance = ?, is_blocked = ?, team_id = ?'
     params = [data.username, data.fullName, data.dob, data.balance, 1 if data.is_blocked else 0, data.team_id]
@@ -236,8 +288,8 @@ def admin_update_user(user_id: int, data: UserUpdateData, user: dict = Depends(g
     
     db.execute(sql, tuple(params))
     db.commit()
-    asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
-    asyncio.run(manager.broadcast({"type": "full_update_required"}, [user_id]))
+    await manager.broadcast({"type": "admin_panel_update_required"})
+    await manager.broadcast({"type": "full_update_required"}, [user_id])
     return {"success": True}
 
 class AdjustBalanceData(BaseModel):
@@ -246,10 +298,10 @@ class AdjustBalanceData(BaseModel):
     comment: str
 
 @app.post("/api/admin/users/adjust-balance")
-def admin_adjust_balance(data: AdjustBalanceData, current_user: dict = Depends(get_current_user)):
+async def admin_adjust_balance(data: AdjustBalanceData, current_user: dict = Depends(get_current_user)):
     database.adjust_balance(data.userId, data.amount, data.comment, current_user["full_name"])
-    asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
-    asyncio.run(manager.broadcast({"type": "full_update_required"}, [data.userId]))
+    await manager.broadcast({"type": "admin_panel_update_required"})
+    await manager.broadcast({"type": "full_update_required"}, [data.userId])
     return {"success": True}
 
 @app.get("/api/admin/teams")
@@ -263,7 +315,7 @@ class TeamCreateData(BaseModel):
     members: List[int] = []
 
 @app.post("/api/admin/teams")
-def admin_create_team(data: TeamCreateData, user: dict = Depends(get_current_user)):
+async def admin_create_team(data: TeamCreateData, user: dict = Depends(get_current_user)):
     db = database.get_db()
     try:
         cursor = db.cursor()
@@ -272,7 +324,7 @@ def admin_create_team(data: TeamCreateData, user: dict = Depends(get_current_use
         for m in data.members:
             cursor.execute('UPDATE users SET team_id = ? WHERE id = ?', (team_id, m))
         db.commit()
-        asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
+        await manager.broadcast({"type": "admin_panel_update_required"})
         return JSONResponse(status_code=201, content={"id": team_id})
     except database.sqlite3.IntegrityError:
         return JSONResponse(status_code=409, content={"message": "Команда з такою назвою вже існує."})
@@ -284,7 +336,7 @@ class BulkAdjustData(BaseModel):
     action: str
 
 @app.post("/api/admin/teams/bulk-adjust")
-def admin_bulk_adjust(data: BulkAdjustData, current_user: dict = Depends(get_current_user)):
+async def admin_bulk_adjust(data: BulkAdjustData, current_user: dict = Depends(get_current_user)):
     final_amount = data.amount if data.action == 'add' else -data.amount
     db = database.get_db()
     cursor = db.cursor()
@@ -304,8 +356,8 @@ def admin_bulk_adjust(data: BulkAdjustData, current_user: dict = Depends(get_cur
             updated_ids.append(uid)
         db.commit()
         
-        asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
-        asyncio.run(manager.broadcast({"type": "full_update_required"}, updated_ids))
+        await manager.broadcast({"type": "admin_panel_update_required"})
+        await manager.broadcast({"type": "full_update_required"}, updated_ids)
         return {"success": True, "message": f"Баланс {len(updated_ids)} учасників оновлено."}
     except Exception as e:
         db.rollback()
@@ -327,7 +379,7 @@ class ShopItemData(BaseModel):
     image: str
 
 @app.post("/api/admin/shop-items")
-def admin_create_shop_item(data: ShopItemData, user: dict = Depends(get_current_user)):
+async def admin_create_shop_item(data: ShopItemData, user: dict = Depends(get_current_user)):
     db = database.get_db()
     cursor = db.cursor()
     cursor.execute('''
@@ -335,11 +387,11 @@ def admin_create_shop_item(data: ShopItemData, user: dict = Depends(get_current_
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image))
     db.commit()
-    asyncio.run(manager.broadcast({"type": "shop_update_required"}))
+    await manager.broadcast({"type": "shop_update_required"})
     return JSONResponse(status_code=201, content={"id": cursor.lastrowid})
 
 @app.put("/api/admin/shop-items/{item_id}")
-def admin_update_shop_item(item_id: int, data: ShopItemData, user: dict = Depends(get_current_user)):
+async def admin_update_shop_item(item_id: int, data: ShopItemData, user: dict = Depends(get_current_user)):
     db = database.get_db()
     db.execute('''
         UPDATE shop_items SET
@@ -347,15 +399,15 @@ def admin_update_shop_item(item_id: int, data: ShopItemData, user: dict = Depend
         WHERE id = ?
     ''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image, item_id))
     db.commit()
-    asyncio.run(manager.broadcast({"type": "shop_update_required"}))
+    await manager.broadcast({"type": "shop_update_required"})
     return {"success": True}
 
 @app.delete("/api/admin/shop-items/{item_id}")
-def admin_delete_shop_item(item_id: int, user: dict = Depends(get_current_user)):
+async def admin_delete_shop_item(item_id: int, user: dict = Depends(get_current_user)):
     db = database.get_db()
     db.execute('DELETE FROM shop_items WHERE id = ?', (item_id,))
     db.commit()
-    asyncio.run(manager.broadcast({"type": "shop_update_required"}))
+    await manager.broadcast({"type": "shop_update_required"})
     return {"success": True}
 
 @app.get("/api/admin/db/download")
@@ -363,5 +415,27 @@ def download_database(user: dict = Depends(get_current_user)):
     if not user.get("is_admin"):
         raise HTTPException(status_code=403, detail="Доступ заборонено")
     return FileResponse(database.DB_PATH, media_type="application/octet-stream", filename="ceo_bank.db")
+
+@app.post("/api/admin/db/upload")
+async def upload_database(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Доступ заборонено")
+    
+    try:
+        database.local.conn.close()
+        delattr(database.local, "conn")
+    except Exception:
+        pass
+
+    with open(database.DB_PATH, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    database.initialize_db()
+    
+    await manager.broadcast({"type": "full_update_required"})
+    await manager.broadcast({"type": "shop_update_required"})
+    await manager.broadcast({"type": "admin_panel_update_required"})
+    
+    return {"success": True, "message": "Базу даних успішно завантажено"}
 
 app.mount("/", StaticFiles(directory="public", html=True), name="public")

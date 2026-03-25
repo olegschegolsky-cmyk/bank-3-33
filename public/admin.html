@@ -90,6 +90,7 @@
       <button class="nav-item active" onclick="showSection('users')"><span class="nav-icon">👥</span> Користувачі</button>
       <button class="nav-item" onclick="showSection('teams')"><span class="nav-icon">🏆</span> Команди</button>
       <button class="nav-item" onclick="showSection('shop')"><span class="nav-icon">🛒</span> Магазин</button>
+      <button class="nav-item" onclick="showSection('deposits')"><span class="nav-icon">🏦</span> Депозити</button>
     </nav>
     <button class="nav-item styled-button logout-btn-sidebar" onclick="adminLogout()"><span class="nav-icon">🚪</span> Вийти</button>
   </div>
@@ -156,6 +157,12 @@
       <h3 class="section-subheader">Список товарів</h3>
       <div id="shopList" class="data-list"></div>
     </div>
+    
+    <div id="deposits" class="section">
+      <h2 class="section-header">Активні депозити</h2>
+      <h3 class="section-subheader">Управління вкладами</h3>
+      <div id="adminDepositsList" class="data-list"></div>
+    </div>
 
     <div id="editUserModal" class="modal-overlay">
       <div class="modal-content-panel">
@@ -188,7 +195,10 @@
     <section class="admin-section">
     <h2>Керування базою даних</h2>
     <div style="display: flex; gap: 10px; margin-top: 15px;">
-        <button id="downloadDbBtn" class="btn">📥 Завантажити БД (Скачати)</button>
+        <button id="downloadDbBtn" class="btn styled-button action-btn">📥 Завантажити БД (Скачати)</button>
+        
+        <input type="file" id="uploadDbInput" accept=".db" style="display: none;">
+        <button id="uploadDbBtn" class="btn styled-button action-btn danger">📤 Вивантажити БД на сервер</button>
     </div>
 </section>
 

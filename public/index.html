@@ -79,7 +79,7 @@
       </div>
     </div>
 
-    <div class="quick-actions-grid" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="quick-actions-grid">
       <button class="action-card" onclick="showSendMoney()">
         <span class="action-icon">💸</span>
         <span class="action-label">Переказ</span>
@@ -91,6 +91,10 @@
       <button class="action-card" onclick="showLeaderboard()">
         <span class="action-icon">🏆</span>
         <span class="action-label">Рейтинг</span>
+      </button>
+      <button class="action-card" onclick="showDepositModal()">
+        <span class="action-icon">🏦</span>
+        <span class="action-label">Депозит</span>
       </button>
     </div>
 
@@ -114,6 +118,28 @@
     <span class="nav-icon">👤</span>
     <span class="nav-label">Профіль</span>
   </button>
+</div>
+
+<div id="depositModal" class="modal">
+  <div class="modal-content">
+    <span class="modal-close-btn" onclick="closeModal('depositModal')" aria-label="Закрити">×</span>
+    <h3>🏦 Депозити</h3>
+    <div class="balance-summary">💰 Доступно: <span id="balanceDeposit">0.00</span> грн</div>
+    <div class="form-group">
+      <input type="number" id="depositAmount" placeholder="Сума депозиту" class="styled-input">
+      <select id="depositDays" class="styled-select">
+        <option value="1">1 день (7%)</option>
+        <option value="2">2 дні (15%)</option>
+        <option value="3">3 дні (24%)</option>
+        <option value="4">4 дні (34%)</option>
+        <option value="5">5 днів (45%)</option>
+      </select>
+      <button class="action-button primary-button" onclick="confirmDeposit()">Відкрити депозит</button>
+    </div>
+    <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid var(--border-color);">
+    <h4 style="text-align: center; margin-bottom: 1rem; color: var(--text-primary);">Ваші депозити</h4>
+    <div id="userDepositsList" class="tasks-list-container"></div>
+  </div>
 </div>
 
 <div id="personalModal" class="modal">
