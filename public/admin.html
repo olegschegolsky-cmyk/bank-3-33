@@ -7,7 +7,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="icon" href="./logo.png" type="image/png">
   <style>
-    :root { --primary-color: #4f46e5; --primary-hover: #4338ca; --secondary-color: #10b981; --danger-color: #ef4444; --warning-color: #f59e0b; --background-light: #f9fafb; --background-dark: #1f2937; --sidebar-bg: #111827; --card-bg: #ffffff; --text-light: #9ca3af; --text-dark: #f3f4f6; --text-headings: #111827; --border-light: #e5e7eb; --border-dark: #374151; --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); --border-radius: 0.75rem; }
+    :root {
+      --primary-color: #4f46e5; --primary-hover: #4338ca; --secondary-color: #10b981;
+      --danger-color: #ef4444; --warning-color: #f59e0b; --background-light: #f9fafb;
+      --background-dark: #1f2937; --sidebar-bg: #111827; --card-bg: #ffffff;
+      --text-light: #9ca3af; --text-dark: #f3f4f6; --text-headings: #111827;
+      --border-light: #e5e7eb; --border-dark: #374151; --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+      --border-radius: 0.75rem;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', sans-serif; background-color: var(--background-light); color: var(--text-headings); line-height: 1.6; font-size: 16px; }
     .login-container-wrapper { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: var(--sidebar-bg); padding: 1rem; }
@@ -85,7 +92,6 @@
       <button class="nav-item" onclick="showSection('shop')"><span class="nav-icon">🛒</span> Магазин</button>
       <button class="nav-item" onclick="showSection('deposits')"><span class="nav-icon">🏦</span> Депозити</button>
       <button class="nav-item" onclick="showSection('exchange')"><span class="nav-icon">📈</span> Біржа</button>
-      <button class="nav-item" onclick="showSection('tasks')"><span class="nav-icon">🎯</span> Завдання</button>
     </nav>
     <button class="nav-item styled-button logout-btn-sidebar" onclick="adminLogout()"><span class="nav-icon">🚪</span> Вийти</button>
   </div>
@@ -109,40 +115,89 @@
       <div id="userList" class="data-list"></div>
     </div>
 
-    <div id="tasks" class="section">
-      <h2 class="section-header">Центр Завдань</h2>
-      <h3 class="section-subheader">Створити нове завдання для всіх</h3>
-      <div class="form-group">
-        <input type="text" id="newTaskTitle" placeholder="Назва завдання (напр., Підписатись на Telegram)">
-        <textarea id="newTaskDesc" placeholder="Опис та умови виконання"></textarea>
-        <input type="number" id="newTaskReward" placeholder="Винагорода (грн)">
-        <button onclick="createAdminTask()" class="styled-button action-btn">Опублікувати завдання</button>
-      </div>
-      <hr>
-      <h3 class="section-subheader">Видати винагороду користувачу (після перевірки)</h3>
-      <div class="form-group form-grid">
-        <select id="rewardUserSelect"></select>
-        <select id="rewardTaskSelect"></select>
-        <button onclick="rewardUserTask()" class="styled-button action-btn warning full-width">Підтвердити та нарахувати бонус</button>
-      </div>
-      <hr>
-      <h3 class="section-subheader">Список активних завдань</h3>
-      <div id="adminTasksList" class="data-list"></div>
+    <div id="teams" class="section">
+        <h2 class="section-header">Управління командами</h2>
+        <h3 class="section-subheader">Створити команду</h3>
+        <div class="form-group">
+            <input type="text" id="teamName" placeholder="Назва нової команди">
+            <label for="teamMembers">Оберіть учасників (можна вибрати декілька, затиснувши Ctrl/Cmd):</label>
+            <select id="teamMembers" multiple style="height: 150px;"></select>
+            <button onclick="createTeam()" class="styled-button action-btn">Створити команду</button>
+        </div>
+        <hr>
+        <div class="bulk-action">
+          <h3 class="section-subheader">Масові операції з балансом команди</h3>
+          <select id="bulkTeamSelect"></select>
+          <input type="number" id="bulkAmount" placeholder="Сума">
+          <input type="text" id="bulkComment" placeholder="Коментар до операції">
+          <select id="bulkAction"><option value="add">Нарахувати</option><option value="subtract">Зняти</option></select>
+          <button onclick="bulkAdjustBalance()" class="styled-button action-btn warning">Застосувати до команди</button>
+        </div>
+        <hr>
+        <h3 class="section-subheader">Список команд</h3>
+        <div id="teamList" class="data-list"></div>
     </div>
 
-    <div id="teams" class="section">...</div>
-    <div id="shop" class="section">...</div>
-    <div id="deposits" class="section">...</div>
-    <div id="exchange" class="section">...</div>
+    <div id="shop" class="section">
+      <h2 class="section-header">Управління магазином</h2>
+      <h3 class="section-subheader">Додати / Редагувати товар</h3>
+      <div class="form-group">
+        <div class="form-grid">
+          <input class="full-width" type="text" id="itemName" placeholder="Назва товару">
+          <input type="number" id="itemPrice" placeholder="Ціна">
+          <input type="number" id="itemDiscountPrice" placeholder="Ціна зі знижкою (необов'язково)">
+          <input type="number" id="itemQuantity" placeholder="Кількість в наявності">
+          <input class="full-width" type="text" id="itemCategory" placeholder="Категорія">
+          <textarea class="full-width" id="itemDescription" placeholder="Опис"></textarea>
+          <input class="full-width" type="text" id="itemImage" placeholder="Шлях до зображення (напр., ./t1.png)">
+        </div>
+        <button id="addShopItemBtn" onclick="addShopItem()" class="styled-button action-btn">Зберегти товар</button>
+        <button id="clearShopFormBtn" onclick="clearShopForm()" class="styled-button action-btn close-btn" style="display: none;">Скасувати редагування</button>
+      </div>
+      <hr>
+      <h3 class="section-subheader">Список товарів</h3>
+      <div id="shopList" class="data-list"></div>
+    </div>
+    
+    <div id="deposits" class="section">
+      <h2 class="section-header">Активні депозити</h2>
+      <h3 class="section-subheader">Управління вкладами</h3>
+      <div id="adminDepositsList" class="data-list"></div>
+    </div>
+
+    <div id="exchange" class="section">
+      <h2 class="section-header">Управління біржою</h2>
+      
+      <h3 class="section-subheader">Створити новий актив</h3>
+      <div class="form-group form-grid">
+        <input type="text" id="exNewName" placeholder="Назва (напр., Bitcoin)">
+        <input type="text" id="exNewSymbol" placeholder="Символ (напр., BTC)">
+        <select id="exNewType"><option value="crypto">Криптовалюта</option><option value="stock">Акції</option></select>
+        <input type="number" id="exNewPrice" placeholder="Стартова ціна (грн)">
+        <input type="number" id="exNewVol" placeholder="Волатильність (0.01 = 1% за трейд)" value="0.01" step="0.001">
+        <button onclick="createExchangeAsset()" class="styled-button action-btn full-width">Створити актив</button>
+      </div>
+      <hr>
+
+      <h3 class="section-subheader">Поточні активи (Ручна зміна курсу)</h3>
+      <div id="adminExchangeAssetsList" class="data-list"></div>
+      <hr>
+
+      <h3 class="section-subheader">Останні транзакції (Торги)</h3>
+      <div id="adminExchangeTxsList" class="data-list"></div>
+    </div>
 
     <div id="editUserModal" class="modal-overlay">
       <div class="modal-content-panel">
         <h3 id="editUserModalTitle">Редагувати користувача</h3>
         <div class="form-group">
-            <div class="form-grid"><input type="text" id="editFullName" placeholder="Прізвище та ім'я"><input type="text" id="editUsername" placeholder="Логін"></div>
+            <div class="form-grid">
+                <input type="text" id="editFullName" placeholder="Прізвище та ім'я">
+                <input type="text" id="editUsername" placeholder="Логін">
+            </div>
           <input type="text" id="editDob" placeholder="Дата народження (РРРР-ММ-ДД)">
           <input type="number" id="editBalance" placeholder="Баланс">
-          <input type="password" id="editPassword" placeholder="Новий пароль">
+          <input type="password" id="editPassword" placeholder="Новий пароль (залиште порожнім, щоб не змінювати)">
           <label for="editTeam">Команда:</label>
           <select id="editTeam"></select>
           <label style="display: flex; align-items: center; gap: 0.5rem;"><input type="checkbox" id="editBlocked"> Заблокувати користувача</label>
@@ -154,20 +209,24 @@
           <input type="text" id="adjustComment" placeholder="Коментар до транзакції">
           <button onclick="adjustBalance()" class="styled-button action-btn warning">Змінити баланс</button>
         </div>
-        <div class="modal-buttons"><button onclick="saveUserChanges()" class="styled-button action-btn">Зберегти</button><button onclick="closeModal('editUserModal')" class="styled-button action-btn close-btn">Закрити</button></div>
+        <div class="modal-buttons">
+          <button onclick="saveUserChanges()" class="styled-button action-btn">Зберегти</button>
+          <button onclick="closeModal('editUserModal')" class="styled-button action-btn close-btn">Закрити</button>
+        </div>
       </div>
     </div>
     <section class="admin-section">
-      <h2>Керування базою даних</h2>
-      <div style="display: flex; gap: 10px; margin-top: 15px;">
-        <button id="downloadDbBtn" class="btn styled-button action-btn">📥 Завантажити БД</button>
+    <h2>Керування базою даних</h2>
+    <div style="display: flex; gap: 10px; margin-top: 15px;">
+        <button id="downloadDbBtn" class="btn styled-button action-btn">📥 Завантажити БД (Скачати)</button>
         <input type="file" id="uploadDbInput" accept=".db" style="display: none;">
-        <button id="uploadDbBtn" class="btn styled-button action-btn danger">📤 Вивантажити БД</button>
-      </div>
-    </section>
+        <button id="uploadDbBtn" class="btn styled-button action-btn danger">📤 Вивантажити БД на сервер</button>
+    </div>
+</section>
+
   </main>
 </div>
 
-<script src="script.js?v=4.0"></script>
+<script src="script.js?v=3.0"></script>
 </body>
 </html>

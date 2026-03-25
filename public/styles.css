@@ -534,18 +534,3 @@ input:-webkit-autofill + .input-label {
 .asset-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
 .chart-container { width: 100%; height: 200px; margin-bottom: 1.5rem; position: relative; }
 
-/* --- СТИЛІ ЦЕНТРУ ЗАВДАНЬ --- */
-.task-card {
-    background: var(--content-bg-light); border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-md); padding: 1.25rem;
-    display: flex; flex-direction: column; gap: 0.5rem; position: relative;
-    overflow: hidden;
-}
-.task-card.completed { border-color: var(--accent-color); background: rgba(16, 185, 129, 0.05); opacity: 0.7;}
-.task-header { display: flex; justify-content: space-between; align-items: flex-start; }
-.task-title { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin: 0; }
-.task-reward { font-weight: 700; color: var(--accent-color); font-size: 1.1rem; background: rgba(16, 185, 129, 0.1); padding: 0.25rem 0.5rem; border-radius: 6px; }
-.task-desc { font-size: 0.85rem; color: var(--text-secondary); margin: 0; }
-.task-status { margin-top: 0.5rem; font-size: 0.85rem; font-weight: 600; text-align: right; }
-.task-status.done { color: var(--accent-color); }
-.task-status.todo { color: var(--warning-color); }
