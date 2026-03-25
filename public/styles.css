@@ -1,26 +1,29 @@
+/* --- Світла класична тема --- */
 :root {
   --font-family-main: 'Inter', 'Segoe UI', Arial, sans-serif;
-  --primary-color: #6366f1; 
-  --primary-hover: #4f46e5;
+  --primary-color: #4f46e5; 
+  --primary-hover: #4338ca;
   --accent-color: #10b981; 
   --danger-color: #ef4444; 
   --warning-color: #f59e0b; 
 
-  --background-color: #0f172a; 
-  --content-bg: rgba(30, 41, 59, 0.65); 
-  --content-bg-light: rgba(51, 65, 85, 0.8); 
+  /* Світлі кольори фону */
+  --background-color: #f3f4f6; 
+  --content-bg: #ffffff; 
+  --content-bg-light: #f9fafb; 
 
-  --text-primary: #f8fafc; 
-  --text-secondary: #94a3b8; 
-  --text-disabled: #475569; 
+  /* Темні кольори тексту */
+  --text-primary: #111827; 
+  --text-secondary: #4b5563; 
+  --text-disabled: #9ca3af; 
 
-  --border-color: rgba(255, 255, 255, 0.1);
-  --shadow-color: rgba(0, 0, 0, 0.35);
+  --border-color: #e5e7eb;
+  --shadow-color: rgba(0, 0, 0, 0.08);
 
-  --border-radius-sm: 10px;
-  --border-radius-md: 16px;
-  --border-radius-lg: 20px;
-  --bottom-nav-height: 75px;
+  --border-radius-sm: 8px;
+  --border-radius-md: 12px;
+  --border-radius-lg: 16px;
+  --bottom-nav-height: 70px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -29,8 +32,7 @@ html { -webkit-tap-highlight-color: transparent; }
 
 body {
   font-family: var(--font-family-main);
-  background: radial-gradient(circle at top right, #1e1b4b, var(--background-color));
-  background-attachment: fixed;
+  background-color: var(--background-color);
   color: var(--text-primary);
   line-height: 1.6;
   overscroll-behavior-y: contain; 
@@ -48,10 +50,9 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* --- Header --- */
 .header {
-  background-color: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background-color: var(--content-bg);
   padding: 1rem;
   display: flex;
   justify-content: space-between;
@@ -60,146 +61,87 @@ body {
   top: 0;
   z-index: 100;
   border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 2px 10px var(--shadow-color);
 }
 .header-left { display: flex; align-items: center; gap: 0.75rem; }
-.header-logo { width: 35px; height: 35px; border-radius: 50%; box-shadow: 0 0 10px rgba(99, 102, 241, 0.3); }
+.header-logo { width: 35px; height: 35px; border-radius: 50%; }
 .header h1 { font-size: 1.25rem; font-weight: 600; }
 .header-right { display: flex; align-items: center; gap: 0.5rem; }
 
 .logout-btn {
-  background-color: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background-color: var(--content-bg-light);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
   padding: 0.5rem 1rem;
   border-radius: var(--border-radius-sm);
   cursor: pointer;
   font-weight: 500;
   transition: all 0.2s ease;
 }
-.logout-btn:hover { background-color: var(--danger-color); color: white; }
+.logout-btn:hover { background-color: var(--danger-color); color: white; border-color: var(--danger-color); }
 
+/* --- Вхід --- */
 .login-section {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  min-height: 90vh;
-  padding: 1rem;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  text-align: center; min-height: 90vh; padding: 1rem;
 }
-.login-logo { width: 90px; height: auto; margin-bottom: 1.5rem; border-radius: 24px; box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);}
-.login-section h2 { font-size: 1.85rem; margin-bottom: 0.5rem; }
-.login-subtitle { color: var(--text-secondary); margin-bottom: 2.5rem; font-size: 0.95rem; }
+.login-logo { width: 80px; height: auto; margin-bottom: 1.5rem; border-radius: 20px; box-shadow: 0 4px 10px var(--shadow-color);}
+.login-section h2 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+.login-subtitle { color: var(--text-secondary); margin-bottom: 2rem; font-size: 0.95rem; }
 .form-group { display: flex; flex-direction: column; gap: 1.25rem; width: 100%; max-width: 350px; margin-bottom: 1rem;}
 
 .input-container { position: relative; }
 .styled-input {
-  width: 100%;
-  padding: 1.1rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: var(--border-radius-md);
-  background-color: rgba(0, 0, 0, 0.25);
-  backdrop-filter: blur(5px);
-  color: var(--text-primary);
-  font-size: 1rem;
-  transition: all 0.3s ease;
+  width: 100%; padding: 1.1rem; border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md); background-color: var(--content-bg);
+  color: var(--text-primary); font-size: 1rem; transition: all 0.3s ease;
 }
-.styled-input:focus {
-  border-color: var(--primary-color);
-  outline: none;
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
-  background-color: rgba(0, 0, 0, 0.4);
-}
+.styled-input:focus { border-color: var(--primary-color); outline: none; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2); }
 .input-label {
-  position: absolute;
-  left: 1.1rem;
-  top: 1.1rem;
-  color: var(--text-secondary);
-  pointer-events: none;
-  transition: all 0.2s ease-out;
-  background-color: transparent;
-  padding: 0 0.25rem;
+  position: absolute; left: 1.1rem; top: 1.1rem; color: var(--text-secondary);
+  pointer-events: none; transition: all 0.2s ease-out; background-color: transparent; padding: 0 0.25rem;
 }
 .styled-input:focus + .input-label,
 .styled-input:not(:placeholder-shown) + .input-label,
 input:-webkit-autofill + .input-label {
-  top: -0.6rem;
-  left: 0.8rem;
-  font-size: 0.8rem;
-  color: var(--primary-color);
-  background-color: var(--background-color);
-  border-radius: 4px;
+  top: -0.6rem; left: 0.8rem; font-size: 0.8rem; color: var(--primary-color); background-color: var(--content-bg); border-radius: 4px;
 }
 
+/* --- Кнопки --- */
 .action-button {
-  padding: 1.1rem 1.5rem;
-  border: none;
-  border-radius: var(--border-radius-md);
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: center;
+  padding: 1.1rem 1.5rem; border: none; border-radius: var(--border-radius-md);
+  font-size: 1rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease; text-align: center;
 }
-.action-button:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3); }
+.action-button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px var(--shadow-color); }
 .action-button:active { transform: translateY(0); }
-.primary-button { background: linear-gradient(135deg, var(--primary-color), var(--primary-hover)); color: white; }
+.primary-button { background-color: var(--primary-color); color: white; }
 .secondary-button { background-color: var(--content-bg-light); color: var(--text-primary); border: 1px solid var(--border-color); }
 .danger-button { background-color: var(--danger-color); color: white; }
 
+/* --- Картка --- */
 .card-container { perspective: 1500px; margin: 0 auto 1.5rem auto; max-width: 400px; }
 .card {
-  width: 100%;
-  aspect-ratio: 1.586 / 1; 
-  position: relative;
-  transform-style: preserve-3d;
+  width: 100%; aspect-ratio: 1.586 / 1; position: relative; transform-style: preserve-3d;
   transition: transform 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  border-radius: var(--border-radius-lg);
-  box-shadow: 0 15px 35px rgba(0,0,0,0.4);
-  cursor: pointer;
+  border-radius: var(--border-radius-lg); box-shadow: 0 10px 25px rgba(0,0,0,0.15); cursor: pointer;
 }
 .card-front, .card-back {
-  position: absolute;
-  width: 100%; height: 100%;
-  backface-visibility: hidden;
-  border-radius: var(--border-radius-lg);
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  color: white;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  position: absolute; width: 100%; height: 100%; backface-visibility: hidden;
+  border-radius: var(--border-radius-lg); padding: 1.5rem; display: flex; flex-direction: column;
+  justify-content: space-between; color: white; overflow: hidden;
+  background: linear-gradient(135deg, #1e3a8a, #3b82f6); /* Залишаємо картку кольоровою */
 }
-.card-front::before {
-  content: '';
-  position: absolute;
-  top: -50%; right: -50%;
-  width: 200%; height: 200%;
-  background: radial-gradient(circle at 70% 30%, rgba(99, 102, 241, 0.6), transparent 50%),
-              radial-gradient(circle at 30% 70%, rgba(16, 185, 129, 0.5), transparent 50%);
-  animation: rotateGradient 20s linear infinite;
-  z-index: -1;
-}
-@keyframes rotateGradient { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
 .card-back { transform: rotateY(180deg); }
 .card.flipped { transform: rotateY(180deg); }
 
 .card-header { display: flex; justify-content: space-between; align-items: center; }
-.card-logo { width: 50px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
+.card-logo { width: 50px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
 .card-type { font-weight: 700; font-size: 0.9rem; opacity: 0.9; letter-spacing: 2px; }
 .card-chip {
-  width: 45px; height: 35px;
-  background: linear-gradient(135deg, #e2e2e2, #9ca3af);
-  border-radius: 6px;
-  margin-top: 1rem;
-  box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
+  width: 45px; height: 35px; background: linear-gradient(135deg, #e2e2e2, #9ca3af);
+  border-radius: 6px; margin-top: 1rem; box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
 }
-.card-number { font-size: 1.4rem; letter-spacing: 4px; font-family: 'Courier New', monospace; margin: auto 0; text-align: center; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+.card-number { font-size: 1.4rem; letter-spacing: 4px; font-family: 'Courier New', monospace; margin: auto 0; text-align: center; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
 .card-details-front { display: flex; justify-content: space-between; font-size: 0.85rem; text-transform: uppercase; }
 .card-label { display: block; opacity: 0.7; font-size: 0.7rem; margin-bottom: 2px;}
 .card-value { font-weight: 600; letter-spacing: 1px;}
@@ -207,187 +149,157 @@ input:-webkit-autofill + .input-label {
 .magnetic-strip { height: 20%; background-color: #000; margin: 1.5rem -1.5rem 0 -1.5rem; }
 .card-back-details { display: flex; align-items: flex-start; gap: 1rem; margin-top: 1rem;}
 .signature-strip {
-  background-color: #cbd5e1;
-  height: 40px;
-  flex-grow: 1;
-  padding: 0.5rem;
-  text-align: right;
-  font-style: italic;
-  color: #000;
-  border-radius: 4px;
+  background-color: #fff; height: 40px; flex-grow: 1; padding: 0.5rem;
+  text-align: right; font-style: italic; color: #000; border-radius: 4px;
 }
 .card-cvv { font-size: 1.2rem; font-family: 'Courier New', monospace; font-weight: bold;}
-.card-info-text { font-size: 0.65rem; opacity: 0.7; text-align: center; margin-top: auto; }
+.card-info-text { font-size: 0.65rem; opacity: 0.8; text-align: center; margin-top: auto; }
 
+/* --- Баланс та Швидкі Дії --- */
 .balance-display { text-align: center; margin-bottom: 2.5rem; }
-.balance-amount { font-size: 3.5rem; font-weight: 700; color: var(--text-primary); text-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+.balance-amount { font-size: 3.5rem; font-weight: 700; color: var(--text-primary); }
 .balance-currency { font-size: 1.5rem; color: var(--text-secondary); margin-left: 0.25rem; font-weight: 500;}
 
-.quick-actions-grid {
-  display: grid;
-  gap: 1rem;
-  margin-bottom: 2.5rem;
-}
+.quick-actions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2.5rem; }
 .action-card {
-  background: var(--content-bg);
-  border: 1px solid var(--border-color);
-  backdrop-filter: blur(10px);
-  border-radius: var(--border-radius-lg);
-  padding: 1.25rem 0.5rem;
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: center;
-  transition: all 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  background: var(--content-bg); border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg); padding: 1.25rem 0.5rem;
+  color: var(--text-primary); cursor: pointer; text-align: center; transition: all 0.2s ease;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  box-shadow: 0 2px 8px var(--shadow-color);
 }
-.action-card:hover { 
-  background: var(--content-bg-light); 
-  transform: translateY(-4px); 
-  box-shadow: 0 8px 25px rgba(0,0,0,0.2); 
-  border-color: rgba(99, 102, 241, 0.4);
-}
-.action-icon { font-size: 2rem; display: block; margin-bottom: 0.75rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
-.action-label { font-size: 0.85rem; font-weight: 600; letter-spacing: 0.5px;}
+.action-card:hover { transform: translateY(-3px); box-shadow: 0 6px 15px rgba(0,0,0,0.08); border-color: var(--primary-color); }
+.action-icon { font-size: 2rem; display: block; margin-bottom: 0.75rem; }
+.action-label { font-size: 0.85rem; font-weight: 600; }
 
+/* --- Нижня навігація --- */
 .bottom-nav {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  height: var(--bottom-nav-height);
-  max-width: 500px;
-  margin: 0 auto;
-  background-color: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  border-top: 1px solid var(--border-color);
-  z-index: 1000;
-  padding-bottom: env(safe-area-inset-bottom);
+  position: fixed; bottom: 0; left: 0; right: 0; height: var(--bottom-nav-height);
+  max-width: 500px; margin: 0 auto; background-color: var(--content-bg);
+  display: flex; justify-content: space-around; align-items: center;
+  border-top: 1px solid var(--border-color); z-index: 1000; padding-bottom: env(safe-area-inset-bottom);
+  box-shadow: 0 -2px 10px var(--shadow-color);
 }
 .nav-btn {
-  background: none; border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  transition: all 0.3s ease;
-  flex-grow: 1; padding: 0.5rem 0;
+  background: none; border: none; color: var(--text-secondary); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  transition: all 0.2s ease; flex-grow: 1; padding: 0.5rem 0;
 }
-.nav-btn.active { color: var(--primary-color); transform: translateY(-3px); }
-.nav-icon { font-size: 1.6rem; transition: transform 0.3s; }
-.nav-btn.active .nav-icon { transform: scale(1.15); filter: drop-shadow(0 2px 5px rgba(99, 102, 241, 0.5));}
+.nav-btn.active { color: var(--primary-color); transform: translateY(-2px); }
+.nav-icon { font-size: 1.5rem; transition: transform 0.2s; }
+.nav-btn.active .nav-icon { transform: scale(1.1); }
 .nav-label { font-size: 0.75rem; font-weight: 600; }
 
+/* --- Історія Транзакцій --- */
 .transactions-section {
-  background: var(--content-bg);
-  border: 1px solid var(--border-color);
-  backdrop-filter: blur(10px);
-  padding: 1.5rem;
-  border-radius: var(--border-radius-lg);
+  background: var(--content-bg); border: 1px solid var(--border-color); padding: 1.5rem;
+  border-radius: var(--border-radius-lg); box-shadow: 0 2px 8px var(--shadow-color);
 }
-.transactions-section h3 { margin-bottom: 1.5rem; font-size: 1.3rem; font-weight: 700; }
+.transactions-section h3 { margin-bottom: 1.5rem; font-size: 1.3rem; font-weight: 700; color: var(--text-primary); }
 .transaction-date-group {
   font-size: 0.85rem; font-weight: 600; color: var(--primary-color);
-  margin: 1.5rem 0 1rem 0; text-transform: uppercase; letter-spacing: 1px;
+  margin: 1.5rem 0 1rem 0; text-transform: uppercase; letter-spacing: 0.5px;
 }
-.transaction-item {
-  display: flex; align-items: center; padding: 1rem 0;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  animation: fadeIn 0.3s ease-out;
-}
+.transaction-item { display: flex; align-items: center; padding: 1rem 0; border-bottom: 1px solid var(--border-color); animation: fadeIn 0.3s ease-out; }
 .transaction-item:last-child { border-bottom: none; }
 .transaction-icon {
-  font-size: 1.6rem; margin-right: 1.25rem;
-  width: 50px; height: 50px; border-radius: 16px;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(255,255,255,0.05);
-  box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
+  font-size: 1.5rem; margin-right: 1.25rem; width: 45px; height: 45px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center; background: var(--content-bg-light); color: var(--text-primary);
 }
 .transaction-info { flex-grow: 1; }
-.transaction-action { font-weight: 600; display: block; font-size: 0.95rem;}
+.transaction-action { font-weight: 600; display: block; font-size: 0.95rem; color: var(--text-primary);}
 .transaction-comment { font-size: 0.85rem; color: var(--text-secondary); margin-top: 2px;}
 .transaction-time { font-size: 0.75rem; color: var(--text-disabled); margin-top: 4px; display: block;}
-.transaction-amount { font-weight: 700; font-size: 1.2rem; margin-left: auto; padding-left: 1rem; text-align: right; }
+.transaction-amount { font-weight: 700; font-size: 1.1rem; margin-left: auto; padding-left: 1rem; text-align: right; }
 .transaction-amount.positive { color: var(--accent-color); }
 .transaction-amount.negative { color: var(--text-primary); }
 .no-transactions { text-align: center; padding: 2rem; color: var(--text-secondary); font-style: italic;}
 
+/* --- Модальні вікна --- */
 .modal {
   display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-  background-color: rgba(0, 0, 0, 0.75); z-index: 2000;
-  justify-content: center; align-items: flex-end;
-  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  background-color: rgba(0, 0, 0, 0.5); z-index: 2000; justify-content: center; align-items: flex-end;
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
 }
 .modal-content {
-  background: rgba(15, 23, 42, 0.95);
-  border: 1px solid var(--border-color);
-  padding: 2rem 1.5rem;
-  border-radius: 24px 24px 0 0;
-  box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
-  width: 100%; max-width: 500px; max-height: 85vh; overflow-y: auto;
-  animation: slideUp 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
-  position: relative;
+  background: var(--content-bg); border-top: 1px solid var(--border-color); padding: 2rem 1.5rem;
+  border-radius: 24px 24px 0 0; box-shadow: 0 -5px 20px rgba(0,0,0,0.1); width: 100%; max-width: 500px;
+  max-height: 85vh; overflow-y: auto; animation: slideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); position: relative;
 }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.modal-content h3 { color: var(--text-primary); margin-top: 0; margin-bottom: 1.5rem; font-size: 1.6rem; text-align: center; font-weight: 700;}
+.modal-content h3 { color: var(--text-primary); margin-top: 0; margin-bottom: 1.5rem; font-size: 1.5rem; text-align: center; font-weight: 700;}
 .modal-close-btn {
-  position: absolute; top: 1rem; right: 1rem; font-size: 2.5rem;
-  color: var(--text-secondary); background: none; border: none;
-  cursor: pointer; line-height: 1; padding: 0.5rem; z-index: 2010; transition: color 0.2s;
+  position: absolute; top: 1rem; right: 1rem; font-size: 2rem; color: var(--text-disabled);
+  background: none; border: none; cursor: pointer; line-height: 1; padding: 0.5rem; z-index: 2010; transition: color 0.2s;
 }
-.modal-close-btn:hover { color: white; }
-.balance-summary { text-align: center; margin-bottom: 1.5rem; font-size: 1.15rem; font-weight: 600; color: var(--primary-color); background: rgba(99,102,241,0.1); padding: 0.75rem; border-radius: var(--border-radius-md);}
+.modal-close-btn:hover { color: var(--text-primary); }
+.balance-summary {
+  text-align: center; margin-bottom: 1.5rem; font-size: 1.15rem; font-weight: 600;
+  color: var(--primary-color); background: var(--content-bg-light); padding: 0.75rem;
+  border-radius: var(--border-radius-md); border: 1px solid var(--border-color);
+}
 
+/* --- Цифровий паспорт --- */
 .passport-container { margin-bottom: 1rem; }
 .passport-card-display {
-  background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.15);
+  background: var(--content-bg-light); border: 1px solid var(--border-color);
   border-radius: var(--border-radius-lg); padding: 1.5rem;
 }
-.passport-header-display { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1rem;}
-.passport-header-display h4 { font-size: 1rem; text-transform: uppercase; margin:0; letter-spacing: 1px;}
+.passport-header-display { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;}
+.passport-header-display h4 { font-size: 1rem; text-transform: uppercase; margin:0; letter-spacing: 0.5px; color: var(--primary-color);}
 .passport-body-display { display: flex; gap: 1rem; }
 .passport-details-display p { font-size: 0.9rem; margin: 0.5rem 0; color: var(--text-secondary);}
 .passport-details-display strong { min-width: 130px; display: inline-block; color: var(--text-primary);}
 .profile-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 1.5rem; }
 
+/* --- Списки --- */
 .tasks-list-container { display: flex; flex-direction: column; gap: 1rem; padding-right: 0.5rem; }
 .event-item {
-  background: rgba(255,255,255,0.05); padding: 1.25rem;
-  border-radius: var(--border-radius-md); display: flex; gap: 0.75rem;
-  border-left: 5px solid var(--primary-color); flex-direction: column;
-  transition: transform 0.2s;
+  background: var(--content-bg-light); padding: 1.25rem; border-radius: var(--border-radius-md);
+  display: flex; gap: 0.75rem; border-left: 4px solid var(--primary-color); flex-direction: column;
 }
-.event-item:hover { transform: translateX(5px); background: rgba(255,255,255,0.08); }
-.event-item h4 { margin: 0 0 0.5rem 0; font-size: 1.1rem; }
+.event-item h4 { margin: 0 0 0.5rem 0; font-size: 1.05rem; color: var(--text-primary); }
 .event-item p { margin: 0; font-size: 0.9rem; color: var(--text-secondary); }
 .event-item strong { color: var(--text-primary); }
 
 .styled-select {
-  padding: 1.1rem; border-radius: var(--border-radius-md); border: 1px solid rgba(255,255,255,0.15);
-  background-color: rgba(0,0,0,0.3); color: white; width: 100%; font-size: 1rem; appearance: none;
+  padding: 1.1rem; border-radius: var(--border-radius-md); border: 1px solid var(--border-color);
+  background-color: var(--content-bg); color: var(--text-primary); width: 100%; font-size: 1rem; appearance: none; outline: none;
 }
+.styled-select:focus { border-color: var(--primary-color); }
 .confirm-buttons { display: flex; gap: 1rem; justify-content: flex-end; }
 .confirm-buttons .action-button { flex-grow: 1; }
-.confirm-text { text-align: center; font-size: 1.2rem; margin-bottom: 1.5rem;}
+.confirm-text { text-align: center; font-size: 1.1rem; margin-bottom: 1.5rem; color: var(--text-primary);}
 
-.shop-items-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; margin-top: 1rem; }
+/* --- Магазин --- */
+.shop-items-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 1rem; }
 .shop-item-card {
-  background: rgba(255,255,255,0.05);
-  border-radius: var(--border-radius-md); padding: 1.25rem;
-  text-align: center; border: 1px solid rgba(255,255,255,0.1);
-  transition: all 0.3s ease; display: flex; flex-direction: column; justify-content: space-between;
+  background: var(--content-bg); border-radius: var(--border-radius-md); padding: 1.25rem;
+  text-align: center; border: 1px solid var(--border-color); display: flex; flex-direction: column;
+  justify-content: space-between; transition: all 0.2s ease;
 }
-.shop-item-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.3); background: rgba(255,255,255,0.08); border-color: rgba(99,102,241,0.3);}
-.shop-item-image { width: 100%; height: 130px; object-fit: contain; margin-bottom: 1rem; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2)); }
-.shop-item-name { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; flex-grow: 1; color: var(--text-primary);}
-.shop-item-price-original { font-size: 0.85rem; color: var(--text-secondary); text-decoration: line-through; display: block; }
-.shop-item-price { font-size: 1.25rem; color: var(--accent-color); font-weight: 700; display: block;}
-.add-to-cart-button { margin-top: 1rem; padding: 0.85rem;}
+.shop-item-card:hover { transform: translateY(-3px); box-shadow: 0 6px 15px var(--shadow-color); border-color: var(--primary-color);}
+.shop-item-image { width: 100%; height: 110px; object-fit: contain; margin-bottom: 1rem; }
+.shop-item-name { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.5rem; flex-grow: 1; color: var(--text-primary);}
+.shop-item-price-original { font-size: 0.85rem; color: var(--text-disabled); text-decoration: line-through; display: block; }
+.shop-item-price { font-size: 1.15rem; color: var(--accent-color); font-weight: 700; display: block;}
+.add-to-cart-button { margin-top: 1rem; padding: 0.75rem; width: 100%; }
 
-#qr-reader video { border-radius: var(--border-radius-md); border: 2px solid rgba(255,255,255,0.1);}
-#qr-reader-results { color: var(--accent-color); text-align: center; margin-top: 1rem; font-weight: 600; animation: fadeIn 0.5s; padding: 1rem; background: rgba(16,185,129,0.1); border-radius: var(--border-radius-md);}
+/* --- Кошик --- */
+.cart-item-display { display: flex; align-items: center; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--border-color); }
+.cart-item-image { width: 60px; height: 60px; object-fit: contain; border-radius: var(--border-radius-sm); }
+.cart-item-info { flex-grow: 1; }
+.cart-item-info h4 { color: var(--text-primary); font-size: 0.95rem; margin-bottom: 0.25rem; }
+.cart-item-info p { color: var(--text-secondary); font-size: 0.85rem; }
+.cart-summary { margin-top: 1.5rem; text-align: right; }
+.cart-summary p { margin: 0.25rem 0; color: var(--text-secondary); }
+.cart-total-amount { font-size: 1.25rem; font-weight: 700; margin-top: 0.5rem; color: var(--text-primary) !important; }
+
+/* --- Інше --- */
+.shop-header-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.header-buttons-group { display: flex; gap: 0.5rem; align-items: center; }
+.cart-button { background-color: var(--content-bg-light); color: var(--text-primary); padding: 0.6rem 1rem; font-size: 0.9rem; border: 1px solid var(--border-color); }
+.shop-close-btn { position: static; margin-left: auto; top: auto; right: auto; font-size: 2rem; }
+.shop-balance { margin-bottom: 1rem !important; }
+#qr-reader video { border-radius: var(--border-radius-md); border: 1px solid var(--border-color);}
+#qr-reader-results { color: var(--accent-color); text-align: center; margin-top: 1rem; font-weight: 600; padding: 1rem; background: rgba(16,185,129,0.1); border-radius: var(--border-radius-md);}
