@@ -1,4 +1,4 @@
-const PROD_URL = 'ceo-production.up.railway.app'; 
+const PROD_URL = 'bank-3-33-production.up.railway.app';
 const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : `https://${PROD_URL}`;
 const WS_BASE_URL = window.location.hostname === 'localhost' ? 'ws://localhost:3001/ws' : `wss://${PROD_URL}/ws`;
 
