@@ -57,6 +57,22 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# --- ФОНОВИЙ РУХ РИНКУ КОЖНІ 30 СЕКУНД ---
+async def market_simulation_task():
+    while True:
+        await asyncio.sleep(30)
+        try:
+            updated = database.simulate_market_fluctuations()
+            if updated:
+                await manager.broadcast({"type": "exchange_update_required"})
+        except Exception as e:
+            print("Market loop error:", e)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(market_simulation_task())
+# ----------------------------------------
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -136,28 +152,16 @@ def transfer(data: TransferData, user: dict = Depends(get_current_user)):
         return {"success": True, "message": result["message"]}
     return JSONResponse(status_code=400, content={"message": result["message"]})
 
-
-# ==========================================
-# --- НОВИЙ БЛОК: ЛОГІКА БІРЖІ ТА ТОРГІВ ---
-# ==========================================
-
 @app.get("/api/exchange/data")
 def get_exchange_data(user: dict = Depends(get_current_user)):
     db = database.get_db()
-    
-    # 1. Отримуємо всі активи
     assets = db.execute('SELECT * FROM exchange_assets ORDER BY type, name').fetchall()
     assets_list = [dict(a) for a in assets]
-    
-    # 2. Отримуємо історію цін (графік) для кожного активу (останні 30 точок)
     history = {}
     for asset in assets_list:
-        hist = db.execute('SELECT price, timestamp FROM price_history WHERE asset_id = ? ORDER BY id DESC LIMIT 30', (asset['id'],)).fetchall()
+        hist = db.execute('SELECT price, timestamp FROM price_history WHERE asset_id = ? ORDER BY id DESC LIMIT 50', (asset['id'],)).fetchall()
         history[asset['id']] = [{"price": h["price"], "time": h["timestamp"]} for h in reversed(hist)]
-        
-    # 3. Отримуємо портфель поточного користувача
     portfolio = db.execute('SELECT asset_id, amount FROM user_portfolio WHERE user_id = ? AND amount > 0', (user['id'],)).fetchall()
-    
     return {
         "assets": assets_list,
         "history": history,
@@ -170,118 +174,68 @@ class ExchangeTradeData(BaseModel):
 
 @app.post("/api/exchange/buy")
 async def exchange_buy(data: ExchangeTradeData, user: dict = Depends(get_current_user)):
-    if data.amount <= 0:
-        return JSONResponse(status_code=400, content={"message": "Кількість має бути більшою за 0"})
-    
+    if data.amount <= 0: return JSONResponse(status_code=400, content={"message": "Кількість > 0"})
     db = database.get_db()
     cursor = db.cursor()
     try:
         cursor.execute("BEGIN TRANSACTION")
         asset = cursor.execute("SELECT * FROM exchange_assets WHERE id = ?", (data.assetId,)).fetchone()
-        if not asset:
-            db.rollback()
-            return JSONResponse(status_code=404, content={"message": "Актив не знайдено"})
-        
+        if not asset: return JSONResponse(status_code=404, content={"message": "Актив не знайдено"})
         total_cost = asset["price"] * data.amount
         u = cursor.execute("SELECT balance FROM users WHERE id = ?", (user["id"],)).fetchone()
-        
         if u["balance"] < total_cost:
             db.rollback()
             return JSONResponse(status_code=400, content={"message": f"Недостатньо коштів. Потрібно {total_cost:.2f} грн."})
-            
-        # 1. Знімаємо гроші
         cursor.execute("UPDATE users SET balance = balance - ? WHERE id = ?", (total_cost, user["id"]))
-        
-        # 2. Додаємо в портфель
         port = cursor.execute("SELECT amount FROM user_portfolio WHERE user_id = ? AND asset_id = ?", (user["id"], data.assetId)).fetchone()
-        if port:
-            cursor.execute("UPDATE user_portfolio SET amount = amount + ? WHERE user_id = ? AND asset_id = ?", (data.amount, user["id"], data.assetId))
-        else:
-            cursor.execute("INSERT INTO user_portfolio (user_id, asset_id, amount) VALUES (?, ?, ?)", (user["id"], data.assetId, data.amount))
-            
-        # 3. РИНКОВА ДИНАМІКА: Купівля піднімає ціну (збільшення на % волатильності)
+        if port: cursor.execute("UPDATE user_portfolio SET amount = amount + ? WHERE user_id = ? AND asset_id = ?", (data.amount, user["id"], data.assetId))
+        else: cursor.execute("INSERT INTO user_portfolio (user_id, asset_id, amount) VALUES (?, ?, ?)", (user["id"], data.assetId, data.amount))
         new_price = asset["price"] * (1 + asset["volatility"])
         cursor.execute("UPDATE exchange_assets SET price = ? WHERE id = ?", (new_price, data.assetId))
         cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (data.assetId, new_price))
-        
-        # 4. Записуємо транзакцію біржі
-        cursor.execute('''INSERT INTO exchange_transactions 
-                          (user_id, asset_id, type, amount, price_per_unit, total_cost) 
-                          VALUES (?, ?, 'buy', ?, ?, ?)''',
-                       (user["id"], data.assetId, data.amount, asset["price"], total_cost))
-        
+        cursor.execute('''INSERT INTO exchange_transactions (user_id, asset_id, type, amount, price_per_unit, total_cost) VALUES (?, ?, 'buy', ?, ?, ?)''', (user["id"], data.assetId, data.amount, asset["price"], total_cost))
         db.commit()
         await manager.broadcast({"type": "full_update_required"}, [user["id"]])
         await manager.broadcast({"type": "exchange_update_required"})
-        return {"success": True, "message": f"Успішно куплено {data.amount} {asset['symbol']} за {total_cost:.2f} грн."}
+        return {"success": True, "message": f"Куплено {data.amount} {asset['symbol']}"}
     except Exception as e:
         db.rollback()
-        return JSONResponse(status_code=400, content={"message": "Помилка торгів: " + str(e)})
+        return JSONResponse(status_code=400, content={"message": "Помилка: " + str(e)})
 
 @app.post("/api/exchange/sell")
 async def exchange_sell(data: ExchangeTradeData, user: dict = Depends(get_current_user)):
-    if data.amount <= 0:
-        return JSONResponse(status_code=400, content={"message": "Кількість має бути більшою за 0"})
-        
+    if data.amount <= 0: return JSONResponse(status_code=400, content={"message": "Кількість > 0"})
     db = database.get_db()
     cursor = db.cursor()
     try:
         cursor.execute("BEGIN TRANSACTION")
         asset = cursor.execute("SELECT * FROM exchange_assets WHERE id = ?", (data.assetId,)).fetchone()
         port = cursor.execute("SELECT amount FROM user_portfolio WHERE user_id = ? AND asset_id = ?", (user["id"], data.assetId)).fetchone()
-        
         if not asset or not port or port["amount"] < data.amount:
             db.rollback()
-            return JSONResponse(status_code=400, content={"message": "У вас недостатньо цього активу для продажу."})
-            
+            return JSONResponse(status_code=400, content={"message": "Недостатньо активу."})
         total_revenue = asset["price"] * data.amount
-        
-        # 1. Нараховуємо гроші
         cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (total_revenue, user["id"]))
-        
-        # 2. Забираємо з портфеля
         cursor.execute("UPDATE user_portfolio SET amount = amount - ? WHERE user_id = ? AND asset_id = ?", (data.amount, user["id"], data.assetId))
-            
-        # 3. РИНКОВА ДИНАМІКА: Продаж опускає ціну (зменшення на % волатильності, але не нижче 0.01)
         new_price = max(0.01, asset["price"] * (1 - asset["volatility"]))
         cursor.execute("UPDATE exchange_assets SET price = ? WHERE id = ?", (new_price, data.assetId))
         cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (data.assetId, new_price))
-        
-        # 4. Записуємо транзакцію біржі
-        cursor.execute('''INSERT INTO exchange_transactions 
-                          (user_id, asset_id, type, amount, price_per_unit, total_cost) 
-                          VALUES (?, ?, 'sell', ?, ?, ?)''',
-                       (user["id"], data.assetId, data.amount, asset["price"], total_revenue))
-        
+        cursor.execute('''INSERT INTO exchange_transactions (user_id, asset_id, type, amount, price_per_unit, total_cost) VALUES (?, ?, 'sell', ?, ?, ?)''', (user["id"], data.assetId, data.amount, asset["price"], total_revenue))
         db.commit()
         await manager.broadcast({"type": "full_update_required"}, [user["id"]])
         await manager.broadcast({"type": "exchange_update_required"})
-        return {"success": True, "message": f"Успішно продано {data.amount} {asset['symbol']} за {total_revenue:.2f} грн."}
+        return {"success": True, "message": f"Продано {data.amount} {asset['symbol']}"}
     except Exception as e:
         db.rollback()
-        return JSONResponse(status_code=400, content={"message": "Помилка торгів: " + str(e)})
+        return JSONResponse(status_code=400, content={"message": "Помилка: " + str(e)})
 
-# --- АДМІН БІРЖА ---
 @app.get("/api/admin/exchange")
 def admin_get_exchange(user: dict = Depends(get_current_user)):
     if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
     db = database.get_db()
-    
-    # Історія торгів для адміна
-    txs = db.execute('''
-        SELECT et.*, u.full_name, a.symbol, a.name as asset_name 
-        FROM exchange_transactions et
-        JOIN users u ON et.user_id = u.id
-        JOIN exchange_assets a ON et.asset_id = a.id
-        ORDER BY et.timestamp DESC LIMIT 100
-    ''').fetchall()
-    
+    txs = db.execute('''SELECT et.*, u.full_name, a.symbol, a.name as asset_name FROM exchange_transactions et JOIN users u ON et.user_id = u.id JOIN exchange_assets a ON et.asset_id = a.id ORDER BY et.timestamp DESC LIMIT 100''').fetchall()
     assets = db.execute('SELECT * FROM exchange_assets ORDER BY type, name').fetchall()
-    
-    return {
-        "transactions": [dict(t) for t in txs],
-        "assets": [dict(a) for a in assets]
-    }
+    return {"transactions": [dict(t) for t in txs], "assets": [dict(a) for a in assets]}
 
 class AdminAssetUpdate(BaseModel):
     assetId: int
@@ -313,8 +267,7 @@ async def admin_create_asset(data: AdminCreateAssetData, user: dict = Depends(ge
     db = database.get_db()
     cursor = db.cursor()
     try:
-        cursor.execute("INSERT INTO exchange_assets (name, symbol, type, price, volatility) VALUES (?, ?, ?, ?, ?)",
-                       (data.name, data.symbol, data.type, data.price, data.volatility))
+        cursor.execute("INSERT INTO exchange_assets (name, symbol, type, price, volatility) VALUES (?, ?, ?, ?, ?)", (data.name, data.symbol, data.type, data.price, data.volatility))
         asset_id = cursor.lastrowid
         cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (asset_id, data.price))
         db.commit()
@@ -338,15 +291,12 @@ async def admin_cancel_exchange_tx(data: CancelExTxData, user: dict = Depends(ge
         if not tx:
             db.rollback()
             return JSONResponse(status_code=400, content={"message": "Транзакцію не знайдено або вже скасовано"})
-            
-        # Повертаємо гроші та активи
         if tx['type'] == 'buy':
             cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (tx['total_cost'], tx['user_id']))
             cursor.execute("UPDATE user_portfolio SET amount = amount - ? WHERE user_id = ? AND asset_id = ?", (tx['amount'], tx['user_id'], tx['asset_id']))
-        else: # sell
+        else: 
             cursor.execute("UPDATE users SET balance = balance - ? WHERE id = ?", (tx['total_cost'], tx['user_id']))
             cursor.execute("UPDATE user_portfolio SET amount = amount + ? WHERE user_id = ? AND asset_id = ?", (tx['amount'], tx['user_id'], tx['asset_id']))
-            
         cursor.execute("UPDATE exchange_transactions SET status = 'cancelled' WHERE id = ?", (tx['id'],))
         db.commit()
         await manager.broadcast({"type": "full_update_required"}, [tx["user_id"]])
@@ -357,9 +307,6 @@ async def admin_cancel_exchange_tx(data: CancelExTxData, user: dict = Depends(ge
         db.rollback()
         return JSONResponse(status_code=400, content={"message": str(e)})
 
-# ==========================================
-
-# --- Deposits Endpoints ---
 class DepositData(BaseModel):
     amount: float
     days: int
@@ -387,13 +334,7 @@ def claim_deposit(data: ClaimDepositData, user: dict = Depends(get_current_user)
 def admin_get_deposits(user: dict = Depends(get_current_user)):
     if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
     db = database.get_db()
-    deps = db.execute('''
-        SELECT d.*, u.full_name 
-        FROM deposits d
-        JOIN users u ON d.user_id = u.id
-        WHERE d.status = 'active'
-        ORDER BY d.start_time DESC
-    ''').fetchall()
+    deps = db.execute('''SELECT d.*, u.full_name FROM deposits d JOIN users u ON d.user_id = u.id WHERE d.status = 'active' ORDER BY d.start_time DESC''').fetchall()
     return [dict(d) for d in deps]
 
 class CancelDepositData(BaseModel):
@@ -418,9 +359,7 @@ class PurchaseData(BaseModel):
 
 @app.post("/api/purchase")
 def purchase(data: PurchaseData, user: dict = Depends(get_current_user)):
-    if not data.cart:
-        return JSONResponse(status_code=400, content={"message": "Кошик порожній."})
-    
+    if not data.cart: return JSONResponse(status_code=400, content={"message": "Кошик порожній."})
     db = database.get_db()
     cursor = db.cursor()
     try:
@@ -433,20 +372,15 @@ def purchase(data: PurchaseData, user: dict = Depends(get_current_user)):
                 return JSONResponse(status_code=400, content={"message": "Недостатня кількість товару."})
             price = db_item["discount_price"] if db_item["discount_price"] else db_item["price"]
             total_cost += price * item.quantity
-            
         current_user = cursor.execute("SELECT balance FROM users WHERE id = ?", (user["id"],)).fetchone()
         if current_user["balance"] < total_cost:
             db.rollback()
             return JSONResponse(status_code=400, content={"message": "Недостатньо коштів на балансі."})
-            
         cursor.execute("UPDATE users SET balance = balance - ? WHERE id = ?", (total_cost, user["id"]))
         for item in data.cart:
             cursor.execute("UPDATE shop_items SET quantity = quantity - ?, popularity = popularity + ? WHERE id = ?", (item.quantity, item.quantity, item.id))
-            
-        cursor.execute("INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)",
-                       (user["id"], "purchase", -total_cost, "Магазин", f"Покупка {len(data.cart)} товарів"))
+        cursor.execute("INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)", (user["id"], "purchase", -total_cost, "Магазин", f"Покупка {len(data.cart)} товарів"))
         db.commit()
-        
         asyncio.run(manager.broadcast({"type": "full_update_required"}, [user["id"]]))
         asyncio.run(manager.broadcast({"type": "shop_update_required"}))
         return {"success": True, "message": f"Покупку на суму {total_cost:.2f} грн успішно оформлено."}
@@ -457,13 +391,7 @@ def purchase(data: PurchaseData, user: dict = Depends(get_current_user)):
 @app.get("/api/admin/users")
 def admin_get_users(user: dict = Depends(get_current_user)):
     db = database.get_db()
-    users = db.execute('''
-        SELECT u.id, u.username, u.full_name, u.dob, u.balance, u.is_blocked, u.team_id, t.name as team_name
-        FROM users u
-        LEFT JOIN teams t ON u.team_id = t.id
-        WHERE u.is_admin = 0
-        ORDER BY u.full_name
-    ''').fetchall()
+    users = db.execute('''SELECT u.id, u.username, u.full_name, u.dob, u.balance, u.is_blocked, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.is_admin = 0 ORDER BY u.full_name''').fetchall()
     return [dict(u) for u in users]
 
 class UserCreateData(BaseModel):
@@ -478,8 +406,7 @@ def admin_create_user(data: UserCreateData, user: dict = Depends(get_current_use
     db = database.get_db()
     try:
         cursor = db.cursor()
-        cursor.execute('INSERT INTO users (username, password_hash, full_name, dob, balance) VALUES (?, ?, ?, ?, ?)',
-                       (data.username, database.simple_hash(data.password), data.fullName, data.dob, data.balance))
+        cursor.execute('INSERT INTO users (username, password_hash, full_name, dob, balance) VALUES (?, ?, ?, ?, ?)', (data.username, database.simple_hash(data.password), data.fullName, data.dob, data.balance))
         db.commit()
         asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
         return JSONResponse(status_code=201, content={"id": cursor.lastrowid})
@@ -500,14 +427,11 @@ def admin_update_user(user_id: int, data: UserUpdateData, user: dict = Depends(g
     db = database.get_db()
     sql = 'UPDATE users SET username = ?, full_name = ?, dob = ?, balance = ?, is_blocked = ?, team_id = ?'
     params = [data.username, data.fullName, data.dob, data.balance, 1 if data.is_blocked else 0, data.team_id]
-    
     if data.password:
         sql += ', password_hash = ?'
         params.append(database.simple_hash(data.password))
-        
     sql += ' WHERE id = ?'
     params.append(user_id)
-    
     db.execute(sql, tuple(params))
     db.commit()
     asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
@@ -543,8 +467,7 @@ def admin_create_team(data: TeamCreateData, user: dict = Depends(get_current_use
         cursor = db.cursor()
         cursor.execute('INSERT INTO teams (name) VALUES (?)', (data.name,))
         team_id = cursor.lastrowid
-        for m in data.members:
-            cursor.execute('UPDATE users SET team_id = ? WHERE id = ?', (team_id, m))
+        for m in data.members: cursor.execute('UPDATE users SET team_id = ? WHERE id = ?', (team_id, m))
         db.commit()
         asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
         return JSONResponse(status_code=201, content={"id": team_id})
@@ -568,16 +491,13 @@ def admin_bulk_adjust(data: BulkAdjustData, current_user: dict = Depends(get_cur
         if not users_in_team:
             db.rollback()
             return JSONResponse(status_code=400, content={"message": "В команді немає учасників."})
-            
         updated_ids = []
         for u in users_in_team:
             uid = u["id"]
             cursor.execute('UPDATE users SET balance = balance + ? WHERE id = ?', (final_amount, uid))
-            cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)',
-                           (uid, 'admin_adjustment', final_amount, f"Масова операція ({current_user['full_name']})", data.comment))
+            cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (uid, 'admin_adjustment', final_amount, f"Масова операція ({current_user['full_name']})", data.comment))
             updated_ids.append(uid)
         db.commit()
-        
         asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
         asyncio.run(manager.broadcast({"type": "full_update_required"}, updated_ids))
         return {"success": True, "message": f"Баланс {len(updated_ids)} учасників оновлено."}
@@ -604,10 +524,7 @@ class ShopItemData(BaseModel):
 def admin_create_shop_item(data: ShopItemData, user: dict = Depends(get_current_user)):
     db = database.get_db()
     cursor = db.cursor()
-    cursor.execute('''
-        INSERT INTO shop_items (name, price, discount_price, quantity, category, description, image)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image))
+    cursor.execute('''INSERT INTO shop_items (name, price, discount_price, quantity, category, description, image) VALUES (?, ?, ?, ?, ?, ?, ?)''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image))
     db.commit()
     asyncio.run(manager.broadcast({"type": "shop_update_required"}))
     return JSONResponse(status_code=201, content={"id": cursor.lastrowid})
@@ -615,11 +532,7 @@ def admin_create_shop_item(data: ShopItemData, user: dict = Depends(get_current_
 @app.put("/api/admin/shop-items/{item_id}")
 def admin_update_shop_item(item_id: int, data: ShopItemData, user: dict = Depends(get_current_user)):
     db = database.get_db()
-    db.execute('''
-        UPDATE shop_items SET
-        name = ?, price = ?, discount_price = ?, quantity = ?, category = ?, description = ?, image = ?
-        WHERE id = ?
-    ''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image, item_id))
+    db.execute('''UPDATE shop_items SET name = ?, price = ?, discount_price = ?, quantity = ?, category = ?, description = ?, image = ? WHERE id = ?''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image, item_id))
     db.commit()
     asyncio.run(manager.broadcast({"type": "shop_update_required"}))
     return {"success": True}
@@ -634,32 +547,22 @@ def admin_delete_shop_item(item_id: int, user: dict = Depends(get_current_user))
 
 @app.get("/api/admin/db/download")
 def download_database(user: dict = Depends(get_current_user)):
-    if not user.get("is_admin"):
-        raise HTTPException(status_code=403, detail="Доступ заборонено")
+    if not user.get("is_admin"): raise HTTPException(status_code=403, detail="Доступ заборонено")
     return FileResponse(database.DB_PATH, media_type="application/octet-stream", filename="ceo_bank.db")
 
 @app.post("/api/admin/db/upload")
 async def upload_database(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    if not user.get("is_admin"):
-        raise HTTPException(status_code=403, detail="Доступ заборонено")
-    
+    if not user.get("is_admin"): raise HTTPException(status_code=403, detail="Доступ заборонено")
     try:
         database.local.conn.close()
         delattr(database.local, "conn")
-    except Exception:
-        pass
-
-    with open(database.DB_PATH, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
+    except Exception: pass
+    with open(database.DB_PATH, "wb") as buffer: shutil.copyfileobj(file.file, buffer)
     database.initialize_db()
-    
     await manager.broadcast({"type": "full_update_required"})
     await manager.broadcast({"type": "shop_update_required"})
     await manager.broadcast({"type": "exchange_update_required"})
     await manager.broadcast({"type": "admin_panel_update_required"})
-    
     return {"success": True, "message": "Базу даних успішно завантажено"}
-
 
 app.mount("/", StaticFiles(directory="public", html=True), name="public")

@@ -10,10 +10,11 @@ let confirmedActionCallback = null;
 let currentEditUserId = null;
 let currentEditShopItemId = null;
 
-// Exchange variables
+// Змінні для біржі
 let chartInstance = null;
 let currentExchangeTab = 'crypto';
 let currentAssetId = null;
+let currentChartAssetId = null;
 
 async function fetchWithAuth(url, options = {}) {
   const token = localStorage.getItem('authToken');
@@ -39,6 +40,7 @@ function initializeWebSocket() {
             if (document.getElementById('shopModal')?.style.display === 'flex') loadInitialData();
             break;
         case 'exchange_update_required':
+            // Оновлення біржі кожні 30 секунд
             if (document.getElementById('exchangeModal')?.style.display === 'flex') loadExchangeData();
             break;
         case 'admin_panel_update_required':
@@ -68,7 +70,7 @@ async function login() {
       document.getElementById('menu').style.display = 'flex';
       document.getElementById('bottom-bar').style.display = 'flex';
       initializeWebSocket();
-    } else { alert(result.message || 'Помилка входу.'); }
+    } else { alert(result.message || 'Помилка входу. Перевірте дані.'); }
   } catch (error) { alert('Не вдалося підключитися до сервера.'); }
 }
 
@@ -85,7 +87,7 @@ async function adminLogin() {
             document.getElementById('adminPanel').style.display = 'flex';
             showSection('users');
             initializeWebSocket();
-        } else { alert(result.message || 'Неправильні дані для входу.'); }
+        } else { alert(result.message || 'Неправильні дані для входу або відсутні права адміністратора.'); }
     } catch (error) { alert('Помилка підключення до сервера.'); }
 }
 
@@ -213,6 +215,7 @@ async function claimDeposit(id) {
 // =====================================
 async function showExchangeModal() {
     openModal('exchangeModal');
+    updateActiveNavButton('exchange');
     await loadExchangeData();
 }
 
@@ -221,7 +224,7 @@ async function loadExchangeData() {
         const response = await fetchWithAuth('/api/exchange/data');
         if (response.ok) {
             appData.exchange = await response.json();
-            renderExchangeTab();
+            renderExchangeTab(); // Оновлюємо UI без моргань
         }
     } catch(e) { console.error("Error loading exchange data", e); }
 }
@@ -245,6 +248,7 @@ function renderExchangeTab() {
         return;
     }
 
+    // Перемальовуємо список лише якщо активів додалось/зменшилось або змінилась ціна
     listContainer.innerHTML = assets.map(a => `
         <div class="asset-card ${currentAssetId === a.id ? 'active' : ''}" onclick="selectAsset(${a.id})">
             <span class="asset-card-symbol">${a.symbol}</span>
@@ -254,9 +258,9 @@ function renderExchangeTab() {
     `).join('');
 
     if (currentAssetId) {
-        selectAsset(currentAssetId); // Re-render chart with new data
+        selectAsset(currentAssetId); // Оновлюємо графік
     } else {
-        selectAsset(assets[0].id); // Auto-select first
+        selectAsset(assets[0].id); // Автоматично обираємо перший
     }
 }
 
@@ -265,19 +269,19 @@ function selectAsset(id) {
     const asset = appData.exchange.assets.find(a => a.id === id);
     if(!asset) return;
 
-    // Оновлюємо UI карток
+    // Оновлюємо активний клас у списку
     document.querySelectorAll('.asset-card').forEach(c => c.classList.remove('active'));
     const cards = document.querySelectorAll('.asset-card');
     const index = appData.exchange.assets.filter(a => a.type === currentExchangeTab).findIndex(a => a.id === id);
     if(cards[index]) cards[index].classList.add('active');
 
-    // Оновлюємо торгову зону
+    // Оновлюємо дані активу в торговій зоні
     document.getElementById('tradingZone').style.display = 'block';
     document.getElementById('currentAssetName').textContent = `${asset.name} (${asset.symbol})`;
     document.getElementById('currentAssetPrice').textContent = `${asset.price.toFixed(2)} грн`;
     
     const portItem = appData.exchange.portfolio.find(p => p.asset_id === id);
-    document.getElementById('currentAssetOwned').textContent = portItem ? portItem.amount : '0';
+    document.getElementById('currentAssetOwned').textContent = portItem ? portItem.amount.toFixed(4) : '0';
 
     drawChart(id, asset.name);
 }
@@ -286,14 +290,23 @@ function drawChart(assetId, assetName) {
     const ctx = document.getElementById('exchangeChart').getContext('2d');
     const historyData = appData.exchange.history[assetId] || [];
     
-    // Форматування даних для графіка
     const labels = historyData.map(h => {
         const d = new Date(h.time.replace(' ', 'T') + 'Z');
         return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
     });
     const dataPoints = historyData.map(h => h.price);
 
+    // ПЛАВНЕ ОНОВЛЕННЯ ГРАФІКА
+    if (chartInstance && currentChartAssetId === assetId) {
+        chartInstance.data.labels = labels;
+        chartInstance.data.datasets[0].data = dataPoints;
+        chartInstance.update('none'); // 'none' вимикає анімацію блимання, лінія просто сувається!
+        return;
+    }
+
+    // Якщо це новий актив - малюємо з нуля
     if (chartInstance) chartInstance.destroy();
+    currentChartAssetId = assetId;
 
     chartInstance = new Chart(ctx, {
         type: 'line',
@@ -306,7 +319,7 @@ function drawChart(assetId, assetName) {
                 backgroundColor: 'rgba(16, 185, 129, 0.1)',
                 borderWidth: 2,
                 fill: true,
-                tension: 0.3, // Плавність ліній
+                tension: 0.3,
                 pointRadius: 2,
                 pointHoverRadius: 5
             }]
@@ -316,7 +329,7 @@ function drawChart(assetId, assetName) {
             maintainAspectRatio: false,
             animation: { duration: 800, easing: 'easeOutQuart' },
             scales: {
-                x: { display: false }, // Ховаємо нижню шкалу часу для чистоти
+                x: { display: false },
                 y: { 
                     ticks: { color: '#9ca3af', font: { family: 'Inter' } },
                     grid: { color: 'rgba(255,255,255,0.05)' }
@@ -402,9 +415,14 @@ function showQrCodeModal() { const qrContainer = document.getElementById('qrcode
 function startQrScanner() { if (!html5QrCode) html5QrCode = new Html5Qrcode("qr-reader"); stopQrScanner(); document.getElementById('qr-reader-results').style.display = 'none'; html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (decodedText) => { stopQrScanner(); document.getElementById('sendTo').value = decodedText; const resultsDiv = document.getElementById('qr-reader-results'); resultsDiv.textContent = `✅ Знайдено: ${decodedText}.`; resultsDiv.style.display = 'block'; }, (errorMessage) => { } ).catch(err => console.log('QR Error:', err)); }
 function stopQrScanner() { if (html5QrCode && html5QrCode.getState() === 2) { html5QrCode.stop().catch(err => console.log('Error', err)); } }
 function executeConfirmedAction() { if (typeof confirmedActionCallback === 'function') confirmedActionCallback(); closeModal('confirmModal'); }
-function updateActiveNavButton(screenName) { document.querySelectorAll('.bottom-nav .nav-btn').forEach(b => b.classList.remove('active')); }
+function updateActiveNavButton(screenName) { 
+    const mapping = { 'main': 1, 'shop': 2, 'exchange': 3, 'personal': 4 };
+    document.querySelectorAll('.bottom-nav .nav-btn').forEach(b => b.classList.remove('active')); 
+    const btn = document.querySelector(`.bottom-nav .nav-btn:nth-child(${mapping[screenName] || 1})`);
+    if(btn) btn.classList.add('active');
+}
 function flipCard() { document.querySelector('.card').classList.toggle('flipped'); }
-const showMainScreen = () => { document.querySelectorAll('.modal').forEach(m => closeModal(m.id)); document.querySelector('.bottom-nav .nav-btn:nth-child(1)').classList.add('active'); };
+const showMainScreen = () => { document.querySelectorAll('.modal').forEach(m => closeModal(m.id)); updateActiveNavButton('main'); };
 
 let adminData = { users: [], teams: [], shop: [], exchange: null };
 
@@ -437,19 +455,17 @@ async function loadAdminExchange() {
     const res = await fetchWithAuth('/api/admin/exchange');
     adminData.exchange = await res.json();
     
-    // Активи
     document.getElementById('adminExchangeAssetsList').innerHTML = adminData.exchange.assets.map(a => `
         <div class="data-item">
             <span><strong>${a.symbol}</strong> - ${a.name} (${a.type}) | Ціна: ${a.price.toFixed(2)} грн</span>
             <div class="button-group" style="display:flex; align-items:center; gap:0.5rem;">
-                <input type="number" id="adminAssetPrice_${a.id}" value="${a.price}" style="width:100px; padding:0.5rem;">
-                <input type="number" step="0.01" id="adminAssetVol_${a.id}" value="${a.volatility}" style="width:80px; padding:0.5rem;" title="Волатильність">
+                <input type="number" id="adminAssetPrice_${a.id}" value="${a.price.toFixed(2)}" style="width:100px; padding:0.5rem;">
+                <input type="number" step="0.001" id="adminAssetVol_${a.id}" value="${a.volatility}" style="width:80px; padding:0.5rem;" title="Волатильність">
                 <button onclick="updateAssetPrice(${a.id})" class="styled-button action-btn warning" style="padding:0.5rem;">Змінити</button>
             </div>
         </div>
     `).join('');
 
-    // Транзакції
     const txsList = document.getElementById('adminExchangeTxsList');
     if (adminData.exchange.transactions.length === 0) { txsList.innerHTML = '<p>Немає торгів.</p>'; }
     else {
