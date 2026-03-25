@@ -91,6 +91,7 @@
       <button class="nav-item" onclick="showSection('teams')"><span class="nav-icon">🏆</span> Команди</button>
       <button class="nav-item" onclick="showSection('shop')"><span class="nav-icon">🛒</span> Магазин</button>
       <button class="nav-item" onclick="showSection('deposits')"><span class="nav-icon">🏦</span> Депозити</button>
+      <button class="nav-item" onclick="showSection('exchange')"><span class="nav-icon">📈</span> Біржа</button>
     </nav>
     <button class="nav-item styled-button logout-btn-sidebar" onclick="adminLogout()"><span class="nav-icon">🚪</span> Вийти</button>
   </div>
@@ -164,6 +165,28 @@
       <div id="adminDepositsList" class="data-list"></div>
     </div>
 
+    <div id="exchange" class="section">
+      <h2 class="section-header">Управління біржою</h2>
+      
+      <h3 class="section-subheader">Створити новий актив</h3>
+      <div class="form-group form-grid">
+        <input type="text" id="exNewName" placeholder="Назва (напр., Bitcoin)">
+        <input type="text" id="exNewSymbol" placeholder="Символ (напр., BTC)">
+        <select id="exNewType"><option value="crypto">Криптовалюта</option><option value="stock">Акції</option></select>
+        <input type="number" id="exNewPrice" placeholder="Стартова ціна (грн)">
+        <input type="number" id="exNewVol" placeholder="Волатильність (0.01 = 1% за трейд)" value="0.01" step="0.001">
+        <button onclick="createExchangeAsset()" class="styled-button action-btn full-width">Створити актив</button>
+      </div>
+      <hr>
+
+      <h3 class="section-subheader">Поточні активи (Ручна зміна курсу)</h3>
+      <div id="adminExchangeAssetsList" class="data-list"></div>
+      <hr>
+
+      <h3 class="section-subheader">Останні транзакції (Торги)</h3>
+      <div id="adminExchangeTxsList" class="data-list"></div>
+    </div>
+
     <div id="editUserModal" class="modal-overlay">
       <div class="modal-content-panel">
         <h3 id="editUserModalTitle">Редагувати користувача</h3>
@@ -196,7 +219,6 @@
     <h2>Керування базою даних</h2>
     <div style="display: flex; gap: 10px; margin-top: 15px;">
         <button id="downloadDbBtn" class="btn styled-button action-btn">📥 Завантажити БД (Скачати)</button>
-        
         <input type="file" id="uploadDbInput" accept=".db" style="display: none;">
         <button id="uploadDbBtn" class="btn styled-button action-btn danger">📤 Вивантажити БД на сервер</button>
     </div>
@@ -205,7 +227,6 @@
   </main>
 </div>
 
-<script src="script.js"></script>
-
+<script src="script.js?v=3.0"></script>
 </body>
 </html>

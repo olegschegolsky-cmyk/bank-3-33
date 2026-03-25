@@ -121,7 +121,7 @@ class TransferData(BaseModel):
     comment: str = "Приватний переказ"
 
 @app.post("/api/transfer")
-async def transfer(data: TransferData, user: dict = Depends(get_current_user)):
+def transfer(data: TransferData, user: dict = Depends(get_current_user)):
     if data.amount <= 0:
         return JSONResponse(status_code=400, content={"message": "Некоректні дані для переказу."})
     recipient = database.find_user_by_login(data.recipientFullName)
@@ -132,9 +132,232 @@ async def transfer(data: TransferData, user: dict = Depends(get_current_user)):
     
     result = database.perform_transfer(user["id"], recipient["id"], data.amount, data.comment)
     if result["success"]:
-        await manager.broadcast({"type": "full_update_required"}, [user["id"], recipient["id"]])
+        asyncio.run(manager.broadcast({"type": "full_update_required"}, [user["id"], recipient["id"]]))
         return {"success": True, "message": result["message"]}
     return JSONResponse(status_code=400, content={"message": result["message"]})
+
+
+# ==========================================
+# --- НОВИЙ БЛОК: ЛОГІКА БІРЖІ ТА ТОРГІВ ---
+# ==========================================
+
+@app.get("/api/exchange/data")
+def get_exchange_data(user: dict = Depends(get_current_user)):
+    db = database.get_db()
+    
+    # 1. Отримуємо всі активи
+    assets = db.execute('SELECT * FROM exchange_assets ORDER BY type, name').fetchall()
+    assets_list = [dict(a) for a in assets]
+    
+    # 2. Отримуємо історію цін (графік) для кожного активу (останні 30 точок)
+    history = {}
+    for asset in assets_list:
+        hist = db.execute('SELECT price, timestamp FROM price_history WHERE asset_id = ? ORDER BY id DESC LIMIT 30', (asset['id'],)).fetchall()
+        history[asset['id']] = [{"price": h["price"], "time": h["timestamp"]} for h in reversed(hist)]
+        
+    # 3. Отримуємо портфель поточного користувача
+    portfolio = db.execute('SELECT asset_id, amount FROM user_portfolio WHERE user_id = ? AND amount > 0', (user['id'],)).fetchall()
+    
+    return {
+        "assets": assets_list,
+        "history": history,
+        "portfolio": [dict(p) for p in portfolio]
+    }
+
+class ExchangeTradeData(BaseModel):
+    assetId: int
+    amount: float
+
+@app.post("/api/exchange/buy")
+async def exchange_buy(data: ExchangeTradeData, user: dict = Depends(get_current_user)):
+    if data.amount <= 0:
+        return JSONResponse(status_code=400, content={"message": "Кількість має бути більшою за 0"})
+    
+    db = database.get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("BEGIN TRANSACTION")
+        asset = cursor.execute("SELECT * FROM exchange_assets WHERE id = ?", (data.assetId,)).fetchone()
+        if not asset:
+            db.rollback()
+            return JSONResponse(status_code=404, content={"message": "Актив не знайдено"})
+        
+        total_cost = asset["price"] * data.amount
+        u = cursor.execute("SELECT balance FROM users WHERE id = ?", (user["id"],)).fetchone()
+        
+        if u["balance"] < total_cost:
+            db.rollback()
+            return JSONResponse(status_code=400, content={"message": f"Недостатньо коштів. Потрібно {total_cost:.2f} грн."})
+            
+        # 1. Знімаємо гроші
+        cursor.execute("UPDATE users SET balance = balance - ? WHERE id = ?", (total_cost, user["id"]))
+        
+        # 2. Додаємо в портфель
+        port = cursor.execute("SELECT amount FROM user_portfolio WHERE user_id = ? AND asset_id = ?", (user["id"], data.assetId)).fetchone()
+        if port:
+            cursor.execute("UPDATE user_portfolio SET amount = amount + ? WHERE user_id = ? AND asset_id = ?", (data.amount, user["id"], data.assetId))
+        else:
+            cursor.execute("INSERT INTO user_portfolio (user_id, asset_id, amount) VALUES (?, ?, ?)", (user["id"], data.assetId, data.amount))
+            
+        # 3. РИНКОВА ДИНАМІКА: Купівля піднімає ціну (збільшення на % волатильності)
+        new_price = asset["price"] * (1 + asset["volatility"])
+        cursor.execute("UPDATE exchange_assets SET price = ? WHERE id = ?", (new_price, data.assetId))
+        cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (data.assetId, new_price))
+        
+        # 4. Записуємо транзакцію біржі
+        cursor.execute('''INSERT INTO exchange_transactions 
+                          (user_id, asset_id, type, amount, price_per_unit, total_cost) 
+                          VALUES (?, ?, 'buy', ?, ?, ?)''',
+                       (user["id"], data.assetId, data.amount, asset["price"], total_cost))
+        
+        db.commit()
+        await manager.broadcast({"type": "full_update_required"}, [user["id"]])
+        await manager.broadcast({"type": "exchange_update_required"})
+        return {"success": True, "message": f"Успішно куплено {data.amount} {asset['symbol']} за {total_cost:.2f} грн."}
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(status_code=400, content={"message": "Помилка торгів: " + str(e)})
+
+@app.post("/api/exchange/sell")
+async def exchange_sell(data: ExchangeTradeData, user: dict = Depends(get_current_user)):
+    if data.amount <= 0:
+        return JSONResponse(status_code=400, content={"message": "Кількість має бути більшою за 0"})
+        
+    db = database.get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("BEGIN TRANSACTION")
+        asset = cursor.execute("SELECT * FROM exchange_assets WHERE id = ?", (data.assetId,)).fetchone()
+        port = cursor.execute("SELECT amount FROM user_portfolio WHERE user_id = ? AND asset_id = ?", (user["id"], data.assetId)).fetchone()
+        
+        if not asset or not port or port["amount"] < data.amount:
+            db.rollback()
+            return JSONResponse(status_code=400, content={"message": "У вас недостатньо цього активу для продажу."})
+            
+        total_revenue = asset["price"] * data.amount
+        
+        # 1. Нараховуємо гроші
+        cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (total_revenue, user["id"]))
+        
+        # 2. Забираємо з портфеля
+        cursor.execute("UPDATE user_portfolio SET amount = amount - ? WHERE user_id = ? AND asset_id = ?", (data.amount, user["id"], data.assetId))
+            
+        # 3. РИНКОВА ДИНАМІКА: Продаж опускає ціну (зменшення на % волатильності, але не нижче 0.01)
+        new_price = max(0.01, asset["price"] * (1 - asset["volatility"]))
+        cursor.execute("UPDATE exchange_assets SET price = ? WHERE id = ?", (new_price, data.assetId))
+        cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (data.assetId, new_price))
+        
+        # 4. Записуємо транзакцію біржі
+        cursor.execute('''INSERT INTO exchange_transactions 
+                          (user_id, asset_id, type, amount, price_per_unit, total_cost) 
+                          VALUES (?, ?, 'sell', ?, ?, ?)''',
+                       (user["id"], data.assetId, data.amount, asset["price"], total_revenue))
+        
+        db.commit()
+        await manager.broadcast({"type": "full_update_required"}, [user["id"]])
+        await manager.broadcast({"type": "exchange_update_required"})
+        return {"success": True, "message": f"Успішно продано {data.amount} {asset['symbol']} за {total_revenue:.2f} грн."}
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(status_code=400, content={"message": "Помилка торгів: " + str(e)})
+
+# --- АДМІН БІРЖА ---
+@app.get("/api/admin/exchange")
+def admin_get_exchange(user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    
+    # Історія торгів для адміна
+    txs = db.execute('''
+        SELECT et.*, u.full_name, a.symbol, a.name as asset_name 
+        FROM exchange_transactions et
+        JOIN users u ON et.user_id = u.id
+        JOIN exchange_assets a ON et.asset_id = a.id
+        ORDER BY et.timestamp DESC LIMIT 100
+    ''').fetchall()
+    
+    assets = db.execute('SELECT * FROM exchange_assets ORDER BY type, name').fetchall()
+    
+    return {
+        "transactions": [dict(t) for t in txs],
+        "assets": [dict(a) for a in assets]
+    }
+
+class AdminAssetUpdate(BaseModel):
+    assetId: int
+    price: float
+    volatility: float
+
+@app.post("/api/admin/exchange/update-asset")
+async def admin_update_asset(data: AdminAssetUpdate, user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    cursor = db.cursor()
+    cursor.execute("UPDATE exchange_assets SET price = ?, volatility = ? WHERE id = ?", (data.price, data.volatility, data.assetId))
+    cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (data.assetId, data.price))
+    db.commit()
+    await manager.broadcast({"type": "exchange_update_required"})
+    await manager.broadcast({"type": "admin_panel_update_required"})
+    return {"success": True}
+
+class AdminCreateAssetData(BaseModel):
+    name: str
+    symbol: str
+    type: str
+    price: float
+    volatility: float
+
+@app.post("/api/admin/exchange/create-asset")
+async def admin_create_asset(data: AdminCreateAssetData, user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("INSERT INTO exchange_assets (name, symbol, type, price, volatility) VALUES (?, ?, ?, ?, ?)",
+                       (data.name, data.symbol, data.type, data.price, data.volatility))
+        asset_id = cursor.lastrowid
+        cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (asset_id, data.price))
+        db.commit()
+        await manager.broadcast({"type": "exchange_update_required"})
+        await manager.broadcast({"type": "admin_panel_update_required"})
+        return {"success": True}
+    except database.sqlite3.IntegrityError:
+        return JSONResponse(status_code=400, content={"message": "Актив з таким символом вже існує"})
+
+class CancelExTxData(BaseModel):
+    transactionId: int
+
+@app.post("/api/admin/exchange/cancel")
+async def admin_cancel_exchange_tx(data: CancelExTxData, user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("BEGIN TRANSACTION")
+        tx = cursor.execute("SELECT * FROM exchange_transactions WHERE id = ? AND status = 'completed'", (data.transactionId,)).fetchone()
+        if not tx:
+            db.rollback()
+            return JSONResponse(status_code=400, content={"message": "Транзакцію не знайдено або вже скасовано"})
+            
+        # Повертаємо гроші та активи
+        if tx['type'] == 'buy':
+            cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (tx['total_cost'], tx['user_id']))
+            cursor.execute("UPDATE user_portfolio SET amount = amount - ? WHERE user_id = ? AND asset_id = ?", (tx['amount'], tx['user_id'], tx['asset_id']))
+        else: # sell
+            cursor.execute("UPDATE users SET balance = balance - ? WHERE id = ?", (tx['total_cost'], tx['user_id']))
+            cursor.execute("UPDATE user_portfolio SET amount = amount + ? WHERE user_id = ? AND asset_id = ?", (tx['amount'], tx['user_id'], tx['asset_id']))
+            
+        cursor.execute("UPDATE exchange_transactions SET status = 'cancelled' WHERE id = ?", (tx['id'],))
+        db.commit()
+        await manager.broadcast({"type": "full_update_required"}, [tx["user_id"]])
+        await manager.broadcast({"type": "exchange_update_required"})
+        await manager.broadcast({"type": "admin_panel_update_required"})
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(status_code=400, content={"message": str(e)})
+
+# ==========================================
 
 # --- Deposits Endpoints ---
 class DepositData(BaseModel):
@@ -142,10 +365,10 @@ class DepositData(BaseModel):
     days: int
 
 @app.post("/api/deposits")
-async def create_deposit(data: DepositData, user: dict = Depends(get_current_user)):
+def create_deposit(data: DepositData, user: dict = Depends(get_current_user)):
     res = database.create_deposit(user["id"], data.amount, data.days)
     if res["success"]:
-        await manager.broadcast({"type": "full_update_required"}, [user["id"]])
+        asyncio.run(manager.broadcast({"type": "full_update_required"}, [user["id"]]))
         return {"success": True, "message": res["message"]}
     return JSONResponse(status_code=400, content={"message": res["message"]})
 
@@ -153,10 +376,10 @@ class ClaimDepositData(BaseModel):
     depositId: int
 
 @app.post("/api/deposits/claim")
-async def claim_deposit(data: ClaimDepositData, user: dict = Depends(get_current_user)):
+def claim_deposit(data: ClaimDepositData, user: dict = Depends(get_current_user)):
     res = database.claim_deposit(user["id"], data.depositId)
     if res["success"]:
-        await manager.broadcast({"type": "full_update_required"}, [user["id"]])
+        asyncio.run(manager.broadcast({"type": "full_update_required"}, [user["id"]]))
         return {"success": True, "message": res["message"]}
     return JSONResponse(status_code=400, content={"message": res["message"]})
 
@@ -177,15 +400,14 @@ class CancelDepositData(BaseModel):
     depositId: int
 
 @app.post("/api/admin/deposits/cancel")
-async def admin_cancel_deposit(data: CancelDepositData, user: dict = Depends(get_current_user)):
+def admin_cancel_deposit(data: CancelDepositData, user: dict = Depends(get_current_user)):
     if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
     res = database.admin_cancel_deposit(data.depositId, user['full_name'])
     if res['success']:
-        await manager.broadcast({"type": "admin_panel_update_required"})
-        await manager.broadcast({"type": "full_update_required"}, [res['user_id']])
+        asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
+        asyncio.run(manager.broadcast({"type": "full_update_required"}, [res['user_id']]))
         return {"success": True}
     return JSONResponse(status_code=400, content={"message": res['message']})
-# -------------------------
 
 class CartItem(BaseModel):
     id: int
@@ -195,7 +417,7 @@ class PurchaseData(BaseModel):
     cart: List[CartItem]
 
 @app.post("/api/purchase")
-async def purchase(data: PurchaseData, user: dict = Depends(get_current_user)):
+def purchase(data: PurchaseData, user: dict = Depends(get_current_user)):
     if not data.cart:
         return JSONResponse(status_code=400, content={"message": "Кошик порожній."})
     
@@ -225,8 +447,8 @@ async def purchase(data: PurchaseData, user: dict = Depends(get_current_user)):
                        (user["id"], "purchase", -total_cost, "Магазин", f"Покупка {len(data.cart)} товарів"))
         db.commit()
         
-        await manager.broadcast({"type": "full_update_required"}, [user["id"]])
-        await manager.broadcast({"type": "shop_update_required"})
+        asyncio.run(manager.broadcast({"type": "full_update_required"}, [user["id"]]))
+        asyncio.run(manager.broadcast({"type": "shop_update_required"}))
         return {"success": True, "message": f"Покупку на суму {total_cost:.2f} грн успішно оформлено."}
     except Exception as e:
         db.rollback()
@@ -252,14 +474,14 @@ class UserCreateData(BaseModel):
     balance: float = 100
 
 @app.post("/api/admin/users")
-async def admin_create_user(data: UserCreateData, user: dict = Depends(get_current_user)):
+def admin_create_user(data: UserCreateData, user: dict = Depends(get_current_user)):
     db = database.get_db()
     try:
         cursor = db.cursor()
         cursor.execute('INSERT INTO users (username, password_hash, full_name, dob, balance) VALUES (?, ?, ?, ?, ?)',
                        (data.username, database.simple_hash(data.password), data.fullName, data.dob, data.balance))
         db.commit()
-        await manager.broadcast({"type": "admin_panel_update_required"})
+        asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
         return JSONResponse(status_code=201, content={"id": cursor.lastrowid})
     except database.sqlite3.IntegrityError:
         return JSONResponse(status_code=409, content={"message": "Користувач з таким логіном вже існує."})
@@ -274,7 +496,7 @@ class UserUpdateData(BaseModel):
     password: Optional[str] = None
 
 @app.put("/api/admin/users/{user_id}")
-async def admin_update_user(user_id: int, data: UserUpdateData, user: dict = Depends(get_current_user)):
+def admin_update_user(user_id: int, data: UserUpdateData, user: dict = Depends(get_current_user)):
     db = database.get_db()
     sql = 'UPDATE users SET username = ?, full_name = ?, dob = ?, balance = ?, is_blocked = ?, team_id = ?'
     params = [data.username, data.fullName, data.dob, data.balance, 1 if data.is_blocked else 0, data.team_id]
@@ -288,8 +510,8 @@ async def admin_update_user(user_id: int, data: UserUpdateData, user: dict = Dep
     
     db.execute(sql, tuple(params))
     db.commit()
-    await manager.broadcast({"type": "admin_panel_update_required"})
-    await manager.broadcast({"type": "full_update_required"}, [user_id])
+    asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
+    asyncio.run(manager.broadcast({"type": "full_update_required"}, [user_id]))
     return {"success": True}
 
 class AdjustBalanceData(BaseModel):
@@ -298,10 +520,10 @@ class AdjustBalanceData(BaseModel):
     comment: str
 
 @app.post("/api/admin/users/adjust-balance")
-async def admin_adjust_balance(data: AdjustBalanceData, current_user: dict = Depends(get_current_user)):
+def admin_adjust_balance(data: AdjustBalanceData, current_user: dict = Depends(get_current_user)):
     database.adjust_balance(data.userId, data.amount, data.comment, current_user["full_name"])
-    await manager.broadcast({"type": "admin_panel_update_required"})
-    await manager.broadcast({"type": "full_update_required"}, [data.userId])
+    asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
+    asyncio.run(manager.broadcast({"type": "full_update_required"}, [data.userId]))
     return {"success": True}
 
 @app.get("/api/admin/teams")
@@ -315,7 +537,7 @@ class TeamCreateData(BaseModel):
     members: List[int] = []
 
 @app.post("/api/admin/teams")
-async def admin_create_team(data: TeamCreateData, user: dict = Depends(get_current_user)):
+def admin_create_team(data: TeamCreateData, user: dict = Depends(get_current_user)):
     db = database.get_db()
     try:
         cursor = db.cursor()
@@ -324,7 +546,7 @@ async def admin_create_team(data: TeamCreateData, user: dict = Depends(get_curre
         for m in data.members:
             cursor.execute('UPDATE users SET team_id = ? WHERE id = ?', (team_id, m))
         db.commit()
-        await manager.broadcast({"type": "admin_panel_update_required"})
+        asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
         return JSONResponse(status_code=201, content={"id": team_id})
     except database.sqlite3.IntegrityError:
         return JSONResponse(status_code=409, content={"message": "Команда з такою назвою вже існує."})
@@ -336,7 +558,7 @@ class BulkAdjustData(BaseModel):
     action: str
 
 @app.post("/api/admin/teams/bulk-adjust")
-async def admin_bulk_adjust(data: BulkAdjustData, current_user: dict = Depends(get_current_user)):
+def admin_bulk_adjust(data: BulkAdjustData, current_user: dict = Depends(get_current_user)):
     final_amount = data.amount if data.action == 'add' else -data.amount
     db = database.get_db()
     cursor = db.cursor()
@@ -356,8 +578,8 @@ async def admin_bulk_adjust(data: BulkAdjustData, current_user: dict = Depends(g
             updated_ids.append(uid)
         db.commit()
         
-        await manager.broadcast({"type": "admin_panel_update_required"})
-        await manager.broadcast({"type": "full_update_required"}, updated_ids)
+        asyncio.run(manager.broadcast({"type": "admin_panel_update_required"}))
+        asyncio.run(manager.broadcast({"type": "full_update_required"}, updated_ids))
         return {"success": True, "message": f"Баланс {len(updated_ids)} учасників оновлено."}
     except Exception as e:
         db.rollback()
@@ -379,7 +601,7 @@ class ShopItemData(BaseModel):
     image: str
 
 @app.post("/api/admin/shop-items")
-async def admin_create_shop_item(data: ShopItemData, user: dict = Depends(get_current_user)):
+def admin_create_shop_item(data: ShopItemData, user: dict = Depends(get_current_user)):
     db = database.get_db()
     cursor = db.cursor()
     cursor.execute('''
@@ -387,11 +609,11 @@ async def admin_create_shop_item(data: ShopItemData, user: dict = Depends(get_cu
         VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image))
     db.commit()
-    await manager.broadcast({"type": "shop_update_required"})
+    asyncio.run(manager.broadcast({"type": "shop_update_required"}))
     return JSONResponse(status_code=201, content={"id": cursor.lastrowid})
 
 @app.put("/api/admin/shop-items/{item_id}")
-async def admin_update_shop_item(item_id: int, data: ShopItemData, user: dict = Depends(get_current_user)):
+def admin_update_shop_item(item_id: int, data: ShopItemData, user: dict = Depends(get_current_user)):
     db = database.get_db()
     db.execute('''
         UPDATE shop_items SET
@@ -399,15 +621,15 @@ async def admin_update_shop_item(item_id: int, data: ShopItemData, user: dict = 
         WHERE id = ?
     ''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image, item_id))
     db.commit()
-    await manager.broadcast({"type": "shop_update_required"})
+    asyncio.run(manager.broadcast({"type": "shop_update_required"}))
     return {"success": True}
 
 @app.delete("/api/admin/shop-items/{item_id}")
-async def admin_delete_shop_item(item_id: int, user: dict = Depends(get_current_user)):
+def admin_delete_shop_item(item_id: int, user: dict = Depends(get_current_user)):
     db = database.get_db()
     db.execute('DELETE FROM shop_items WHERE id = ?', (item_id,))
     db.commit()
-    await manager.broadcast({"type": "shop_update_required"})
+    asyncio.run(manager.broadcast({"type": "shop_update_required"}))
     return {"success": True}
 
 @app.get("/api/admin/db/download")
@@ -434,8 +656,10 @@ async def upload_database(file: UploadFile = File(...), user: dict = Depends(get
     
     await manager.broadcast({"type": "full_update_required"})
     await manager.broadcast({"type": "shop_update_required"})
+    await manager.broadcast({"type": "exchange_update_required"})
     await manager.broadcast({"type": "admin_panel_update_required"})
     
     return {"success": True, "message": "Базу даних успішно завантажено"}
+
 
 app.mount("/", StaticFiles(directory="public", html=True), name="public")
