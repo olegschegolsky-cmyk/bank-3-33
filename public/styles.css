@@ -1,19 +1,19 @@
 /* --- Base Styles & Modern Dark Theme --- */
 :root {
   --font-family-main: 'Inter', 'Segoe UI', Arial, sans-serif;
-  --primary-color: #4f46e5; /* Indigo */
+  --primary-color: #4f46e5; 
   --primary-hover: #4338ca;
-  --accent-color: #10b981; /* Emerald Green */
-  --danger-color: #ef4444; /* Red */
-  --warning-color: #f59e0b; /* Amber */
+  --accent-color: #10b981; 
+  --danger-color: #ef4444; 
+  --warning-color: #f59e0b; 
 
-  --background-color: #111827; /* Very Dark Blue */
-  --content-bg: #1f2937; /* Dark Gray-Blue */
-  --content-bg-light: #374151; /* Lighter Gray-Blue for contrast */
+  --background-color: #111827; 
+  --content-bg: #1f2937; 
+  --content-bg-light: #374151; 
 
-  --text-primary: #f9fafb; /* Almost White */
-  --text-secondary: #9ca3af; /* Medium Gray */
-  --text-disabled: #4b5563; /* Dark Gray */
+  --text-primary: #f9fafb; 
+  --text-secondary: #9ca3af; 
+  --text-disabled: #4b5563; 
 
   --border-color: #374151;
   --shadow-color: rgba(0, 0, 0, 0.25);
@@ -28,7 +28,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html {
-  -webkit-tap-highlight-color: transparent; /* Removes blue highlight on tap */
+  -webkit-tap-highlight-color: transparent; 
 }
 
 body {
@@ -36,7 +36,7 @@ body {
   background-color: var(--background-color);
   color: var(--text-primary);
   line-height: 1.6;
-  overscroll-behavior-y: contain; /* Prevents pull-to-refresh */
+  overscroll-behavior-y: contain; 
 }
 
 .container {
@@ -164,19 +164,15 @@ input:-webkit-autofill + .input-label {
 .danger-button { background-color: var(--danger-color); color: white; }
 
 /* --- Profile Section: Card --- */
-.card-container {
-  perspective: 1500px;
-  margin: 0 auto 1.5rem auto;
-  max-width: 400px;
-}
+.card-container { perspective: 1500px; margin: 0 auto 1.5rem auto; max-width: 400px; }
 .card {
   width: 100%;
-  aspect-ratio: 1.586 / 1; /* Credit card ratio */
+  aspect-ratio: 1.586 / 1; 
   position: relative;
   transform-style: preserve-3d;
   transition: transform 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   border-radius: var(--border-radius-lg);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  box-shadow: 0 15px 35px rgba(0,0,0,0.4);
   cursor: pointer;
 }
 .card-front, .card-back {
@@ -184,62 +180,77 @@ input:-webkit-autofill + .input-label {
   width: 100%; height: 100%;
   backface-visibility: hidden;
   border-radius: var(--border-radius-lg);
-  padding: 1.25rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   color: white;
   overflow: hidden;
-  background: #1c1c1c;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 .card-front::before {
   content: '';
   position: absolute;
   top: -50%; right: -50%;
-  width: 150%; height: 150%;
-  background: radial-gradient(circle at 80% 20%, rgba(79, 70, 229, 0.5), transparent 40%),
-  radial-gradient(circle at 20% 80%, rgba(16, 185, 129, 0.4), transparent 40%);
-  animation: rotateGradient 15s linear infinite;
+  width: 200%; height: 200%;
+  background: radial-gradient(circle at 70% 30%, rgba(99, 102, 241, 0.6), transparent 50%),
+              radial-gradient(circle at 30% 70%, rgba(16, 185, 129, 0.5), transparent 50%);
+  animation: rotateGradient 20s linear infinite;
+  z-index: -1;
 }
 @keyframes rotateGradient { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
 .card-back { transform: rotateY(180deg); }
 .card.flipped { transform: rotateY(180deg); }
 
-.card-header { display: flex; justify-content: space-between; align-items: center; z-index: 1; }
-.card-logo { width: 45px; opacity: 0.9; }
-.card-type { font-weight: 600; font-size: 0.9rem; opacity: 0.8; letter-spacing: 1px; }
+.card-header { display: flex; justify-content: space-between; align-items: center; }
+.card-logo { width: 50px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
+.card-type { font-weight: 700; font-size: 0.9rem; opacity: 0.9; letter-spacing: 2px; }
 .card-chip {
-  width: 50px; height: 38px;
-  background: linear-gradient(135deg, #d3c483, #a4925a);
+  width: 45px; height: 35px;
+  background: linear-gradient(135deg, #e2e2e2, #9ca3af);
   border-radius: 6px;
-  margin-top: 1rem; z-index: 1;
+  margin-top: 1rem;
+  box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
 }
-.card-number { font-size: 1.5rem; letter-spacing: 3px; font-family: 'Courier New', monospace; margin: auto 0; text-align: center; z-index: 1;}
-.card-details-front { display: flex; justify-content: space-between; font-size: 0.8rem; z-index: 1;}
-.card-label { display: block; opacity: 0.7; }
-.card-value { font-weight: 500; }
 
-.magnetic-strip { height: 20%; background-color: #000; margin: 1.25rem -1.25rem 0 -1.25rem; }
+.card-number { 
+  font-size: 1.4rem; 
+  letter-spacing: 4px; 
+  font-family: 'Courier New', monospace; 
+  margin: auto 0; 
+  text-align: center; 
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5); 
+}
+/* Fix for iOS Safari auto-linking numbers */
+.card-number, .card-number a {
+  color: #ffffff !important;
+  text-decoration: none !important;
+  pointer-events: none;
+}
+
+.card-details-front { display: flex; justify-content: space-between; font-size: 0.85rem; text-transform: uppercase; }
+.card-label { display: block; opacity: 0.7; font-size: 0.7rem; margin-bottom: 2px;}
+.card-value { font-weight: 600; letter-spacing: 1px;}
+
+.magnetic-strip { height: 20%; background-color: #000; margin: 1.5rem -1.5rem 0 -1.5rem; }
 .card-back-details { display: flex; align-items: flex-start; gap: 1rem; margin-top: 1rem;}
 .signature-strip {
-  background-color: #fff;
-  height: 38px;
+  background-color: #cbd5e1;
+  height: 40px;
   flex-grow: 1;
   padding: 0.5rem;
   text-align: right;
   font-style: italic;
   color: #000;
-}
-.card-cvv { font-size: 1.1rem; font-family: 'Courier New', monospace; }
-.card-owner-photo {
-  width: 50px;
-  height: 60px;
-  object-fit: cover;
   border-radius: 4px;
-  border: 2px solid #555;
 }
-.card-info-text { font-size: 0.6rem; opacity: 0.6; text-align: center; margin-top: auto; }
+.card-cvv { font-size: 1.2rem; font-family: 'Courier New', monospace; font-weight: bold;}
+.card-info-text { font-size: 0.65rem; opacity: 0.7; text-align: center; margin-top: auto; }
+
 
 /* Profile Section: Balance & Quick Actions */
 .balance-display { text-align: center; margin-bottom: 2rem; }
@@ -248,7 +259,7 @@ input:-webkit-autofill + .input-label {
 
 .quick-actions-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr); /* Адаптовано для 3 кнопок: Переказ, Магазин, Рейтинг */
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
   margin-bottom: 2rem;
 }
@@ -418,7 +429,6 @@ input:-webkit-autofill + .input-label {
 .profile-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-top: 1.5rem; margin-bottom: 1.5rem; }
 .profile-actions .action-button { padding: 0.75rem; font-size: 0.8rem; }
 
-
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
 .stat-item { background-color: var(--background-color); padding: 1rem; border-radius: var(--border-radius-md); text-align: center; }
 .stat-item h4 { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; }
@@ -496,7 +506,6 @@ input:-webkit-autofill + .input-label {
 
 .event-item.purchase { border-left-color: #a78bfa; }
 .event-item.transfer-sent { border-left-color: var(--danger-color); }
-
 
 /* QR Code Scanner */
 #qr-reader video { border-radius: var(--border-radius-md); }
