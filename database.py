@@ -1,7 +1,7 @@
 import sqlite3
 import os
 import threading
-import random # Додано для рандому біржі
+import random 
 
 DB_PATH = os.getenv('DB_PATH', os.path.join(os.path.dirname(__file__), 'ceo_bank.db'))
 
@@ -29,7 +29,6 @@ def simple_hash(s: str) -> str:
     return str(hash_val)
 
 def initialize_db():
-    print('Initializing database schema...')
     db = get_db()
     cursor = db.cursor()
     
@@ -46,12 +45,10 @@ def initialize_db():
             team_id INTEGER,
             FOREIGN KEY (team_id) REFERENCES teams (id) ON DELETE SET NULL
         );
-        
         CREATE TABLE IF NOT EXISTS teams (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE NOT NULL
         );
-        
         CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -62,7 +59,6 @@ def initialize_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
         );
-        
         CREATE TABLE IF NOT EXISTS shop_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -74,7 +70,6 @@ def initialize_db():
             image TEXT,
             popularity INTEGER DEFAULT 0
         );
-        
         CREATE TABLE IF NOT EXISTS deposits (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -95,7 +90,6 @@ def initialize_db():
             price REAL NOT NULL,
             volatility REAL DEFAULT 0.005
         );
-
         CREATE TABLE IF NOT EXISTS user_portfolio (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -105,7 +99,6 @@ def initialize_db():
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
             FOREIGN KEY (asset_id) REFERENCES exchange_assets (id) ON DELETE CASCADE
         );
-
         CREATE TABLE IF NOT EXISTS price_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             asset_id INTEGER NOT NULL,
@@ -113,7 +106,6 @@ def initialize_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (asset_id) REFERENCES exchange_assets (id) ON DELETE CASCADE
         );
-        
         CREATE TABLE IF NOT EXISTS exchange_transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -127,6 +119,22 @@ def initialize_db():
             FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
             FOREIGN KEY (asset_id) REFERENCES exchange_assets (id) ON DELETE CASCADE
         );
+
+        /* --- ЦЕНТР ЗАВДАНЬ --- */
+        CREATE TABLE IF NOT EXISTS admin_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            reward REAL NOT NULL,
+            is_active INTEGER DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS completed_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            task_key TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        );
     """)
 
     try:
@@ -136,10 +144,8 @@ def initialize_db():
     
     admin_user = cursor.execute('SELECT id FROM users WHERE username = ?', ('admin',)).fetchone()
     if not admin_user:
-        cursor.execute(
-            'INSERT INTO users (username, password_hash, full_name, is_admin, balance) VALUES (?, ?, ?, ?, ?)',
-            ('admin', simple_hash('admin123'), 'Головний Адміністратор', 1, 999999)
-        )
+        cursor.execute('INSERT INTO users (username, password_hash, full_name, is_admin, balance) VALUES (?, ?, ?, ?, ?)',
+            ('admin', simple_hash('admin123'), 'Головний Адміністратор', 1, 999999))
     
     initial_assets = [
         ('Bitcoin', 'BTC', 'crypto', 1500.0, 0.02),
@@ -155,11 +161,9 @@ def initialize_db():
             cursor.execute('INSERT INTO price_history (asset_id, price) VALUES (?, ?)', (asset_id, asset[3]))
 
     db.commit()
-    print('Database initialized successfully.')
 
 initialize_db()
 
-# --- ФОНОВИЙ РУХ РИНКУ (КОЖНІ 30 СЕК) ---
 def simulate_market_fluctuations():
     db = get_db()
     cursor = db.cursor()
@@ -168,32 +172,19 @@ def simulate_market_fluctuations():
         assets = cursor.execute("SELECT id, price, volatility FROM exchange_assets").fetchall()
         updated = False
         for asset in assets:
-            # Рандомна зміна ціни від -волатильність до +волатильність (трохи м'якше, ніж ручна покупка)
             change_percent = random.uniform(-asset['volatility'], asset['volatility']) * 0.7
             new_price = asset['price'] * (1 + change_percent)
-            new_price = max(0.01, new_price) # Ціна не може впасти нижче 1 копійки
-            
+            new_price = max(0.01, new_price) 
             cursor.execute("UPDATE exchange_assets SET price = ? WHERE id = ?", (new_price, asset['id']))
             cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (asset['id'], new_price))
-            
-            # Очищуємо стару історію, щоб не забивати пам'ять бази (залишаємо останні 100 точок для графіка)
-            cursor.execute("""
-                DELETE FROM price_history 
-                WHERE asset_id = ? AND id NOT IN (
-                    SELECT id FROM price_history WHERE asset_id = ? ORDER BY timestamp DESC LIMIT 100
-                )
-            """, (asset['id'], asset['id']))
-            
+            cursor.execute("""DELETE FROM price_history WHERE asset_id = ? AND id NOT IN (SELECT id FROM price_history WHERE asset_id = ? ORDER BY timestamp DESC LIMIT 100)""", (asset['id'], asset['id']))
             updated = True
-
         db.commit()
         return updated
     except Exception as e:
         db.rollback()
-        print(f"Market simulation error: {e}")
         return False
 
-# --- Існуючі функції ---
 def find_user_by_login(login: str):
     db = get_db()
     return db.execute('SELECT * FROM users WHERE username = ?', (login,)).fetchone()
@@ -210,12 +201,17 @@ def get_app_data(user_id: int):
     leaderboard = db.execute('''SELECT u.full_name, u.balance, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.is_admin = 0 ORDER BY u.balance DESC''').fetchall()
     deposits = db.execute('SELECT * FROM deposits WHERE user_id = ? ORDER BY start_time DESC', (user_id,)).fetchall()
     
+    completed_tasks = db.execute("SELECT task_key FROM completed_tasks WHERE user_id = ?", (user_id,)).fetchall()
+    admin_tasks = db.execute("SELECT * FROM admin_tasks WHERE is_active = 1").fetchall()
+
     return {
         "currentUser": dict(current_user) if current_user else None,
         "transactions": [dict(t) for t in transactions],
         "shopItems": [dict(i) for i in shop_items],
         "leaderboard": [dict(l) for l in leaderboard],
-        "deposits": [dict(d) for d in deposits]
+        "deposits": [dict(d) for d in deposits],
+        "completedTasks": [c['task_key'] for c in completed_tasks],
+        "adminTasks": [dict(t) for t in admin_tasks]
     }
 
 def perform_transfer(from_user_id: int, to_user_id: int, amount: float, comment: str):
@@ -229,10 +225,21 @@ def perform_transfer(from_user_id: int, to_user_id: int, amount: float, comment:
             return {"success": False, "message": "Недостатньо коштів."}
         cursor.execute('UPDATE users SET balance = balance - ? WHERE id = ?', (amount, from_user_id))
         cursor.execute('UPDATE users SET balance = balance + ? WHERE id = ?', (amount, to_user_id))
+        
         to_user_name = cursor.execute('SELECT full_name FROM users WHERE id = ?', (to_user_id,)).fetchone()['full_name']
         from_user_name = from_user['full_name']
+        
         cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (from_user_id, 'transfer', -amount, to_user_name, comment))
         cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (to_user_id, 'transfer', amount, from_user_name, comment))
+        
+        # АВТО-ЗАВДАННЯ: Переказ від 100 грн
+        if amount >= 100:
+            exists = cursor.execute("SELECT id FROM completed_tasks WHERE user_id = ? AND task_key = 'auto_transfer'", (from_user_id,)).fetchone()
+            if not exists:
+                cursor.execute("INSERT INTO completed_tasks (user_id, task_key) VALUES (?, 'auto_transfer')", (from_user_id,))
+                cursor.execute("UPDATE users SET balance = balance + 200 WHERE id = ?", (from_user_id,))
+                cursor.execute("INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, 'task_reward', 200, 'Система', 'Нагорода за завдання: Перший переказ')", (from_user_id,))
+
         db.commit()
         return {"success": True, "message": "Переказ успішний"}
     except Exception as e:
@@ -268,6 +275,15 @@ def create_deposit(user_id: int, amount: float, days: int):
         cursor.execute('UPDATE users SET balance = balance - ? WHERE id = ?', (amount, user_id))
         cursor.execute('''INSERT INTO deposits (user_id, amount, expected_payout, end_time) VALUES (?, ?, ?, datetime('now', ?))''', (user_id, amount, payout, f'+{days} days'))
         cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (user_id, 'deposit', -amount, 'Банк', f'Депозит на {days} дн.'))
+        
+        # АВТО-ЗАВДАННЯ: Депозит від 150 грн
+        if amount >= 150:
+            exists = cursor.execute("SELECT id FROM completed_tasks WHERE user_id = ? AND task_key = 'auto_deposit'", (user_id,)).fetchone()
+            if not exists:
+                cursor.execute("INSERT INTO completed_tasks (user_id, task_key) VALUES (?, 'auto_deposit')", (user_id,))
+                cursor.execute("UPDATE users SET balance = balance + 100 WHERE id = ?", (user_id,))
+                cursor.execute("INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, 'task_reward', 100, 'Система', 'Нагорода за завдання: Перший депозит')", (user_id,))
+
         db.commit()
         return {"success": True, "message": "Депозит відкрито."}
     except Exception as e:
