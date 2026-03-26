@@ -44,7 +44,7 @@ async def market_simulation_task():
         try:
             if database.simulate_market_fluctuations():
                 await manager.broadcast({"type": "exchange_update_required"})
-        except Exception as e: pass
+        except Exception: pass
 
 @app.on_event("startup")
 async def startup_event(): asyncio.create_task(market_simulation_task())
@@ -138,7 +138,8 @@ async def exchange_buy(data: ExchangeTradeData, user: dict = Depends(get_current
         new_price = asset["price"] * (1 + asset["volatility"])
         cursor.execute("UPDATE exchange_assets SET price = ? WHERE id = ?", (new_price, data.assetId))
         cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (data.assetId, new_price))
-        cursor.execute('''INSERT INTO exchange_transactions (user_id, asset_id, type, amount, price_per_unit, total_cost) VALUES (?, ?, 'buy', ?, ?, ?)''', (user["id"], data.assetId, data.amount, asset["price"], total_cost))
+        cursor.execute("INSERT INTO exchange_transactions (user_id, asset_id, type, amount, price_per_unit, total_cost) VALUES (?, ?, 'buy', ?, ?, ?)", (user["id"], data.assetId, data.amount, asset["price"], total_cost))
+        
         if data.amount >= 3:
             task_k = 'auto_crypto' if asset['type'] == 'crypto' else 'auto_stock'
             reward = 120.0 if asset['type'] == 'crypto' else 180.0
@@ -148,6 +149,7 @@ async def exchange_buy(data: ExchangeTradeData, user: dict = Depends(get_current
                 cursor.execute("INSERT INTO completed_tasks (user_id, task_key) VALUES (?, ?)", (user["id"], task_k))
                 cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (reward, user["id"]))
                 cursor.execute("INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, 'task_reward', ?, 'Система', ?)", (user["id"], reward, f'Нагорода за завдання: {title}'))
+
         db.commit()
         await manager.broadcast({"type": "full_update_required"}, [user["id"]])
         await manager.broadcast({"type": "exchange_update_required"})
@@ -173,7 +175,7 @@ async def exchange_sell(data: ExchangeTradeData, user: dict = Depends(get_curren
         new_price = max(0.01, asset["price"] * (1 - asset["volatility"]))
         cursor.execute("UPDATE exchange_assets SET price = ? WHERE id = ?", (new_price, data.assetId))
         cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (data.assetId, new_price))
-        cursor.execute('''INSERT INTO exchange_transactions (user_id, asset_id, type, amount, price_per_unit, total_cost) VALUES (?, ?, 'sell', ?, ?, ?)''', (user["id"], data.assetId, data.amount, asset["price"], total_revenue))
+        cursor.execute("INSERT INTO exchange_transactions (user_id, asset_id, type, amount, price_per_unit, total_cost) VALUES (?, ?, 'sell', ?, ?, ?)", (user["id"], data.assetId, data.amount, asset["price"], total_revenue))
         db.commit()
         await manager.broadcast({"type": "full_update_required"}, [user["id"]])
         await manager.broadcast({"type": "exchange_update_required"})
@@ -346,7 +348,7 @@ async def claim_deposit(data: ClaimDepositData, user: dict = Depends(get_current
 @app.get("/api/admin/deposits")
 def admin_get_deposits(user: dict = Depends(get_current_user)):
     if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
-    return [dict(d) for d in database.get_db().execute('''SELECT d.*, u.full_name FROM deposits d JOIN users u ON d.user_id = u.id WHERE d.status = 'active' ORDER BY d.start_time DESC''').fetchall()]
+    return [dict(d) for d in database.get_db().execute("SELECT d.*, u.full_name FROM deposits d JOIN users u ON d.user_id = u.id WHERE d.status = 'active' ORDER BY d.start_time DESC").fetchall()]
 
 class CancelDepositData(BaseModel): depositId: int
 @app.post("/api/admin/deposits/cancel")
@@ -379,7 +381,7 @@ async def purchase(data: PurchaseData, user: dict = Depends(get_current_user)):
     except Exception as e: db.rollback(); return JSONResponse(status_code=400, content={"message": str(e)})
 
 @app.get("/api/admin/users")
-def admin_get_users(user: dict = Depends(get_current_user)): return [dict(u) for u in database.get_db().execute('''SELECT u.id, u.username, u.full_name, u.dob, u.balance, u.is_blocked, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.is_admin = 0 ORDER BY u.full_name''').fetchall()]
+def admin_get_users(user: dict = Depends(get_current_user)): return [dict(u) for u in database.get_db().execute("SELECT u.id, u.username, u.full_name, u.dob, u.balance, u.is_blocked, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.is_admin = 0 ORDER BY u.full_name").fetchall()]
 class UserCreateData(BaseModel): username: str; password: str; fullName: str; dob: Optional[str] = None; balance: float = 100
 @app.post("/api/admin/users")
 async def admin_create_user(data: UserCreateData, user: dict = Depends(get_current_user)):
@@ -400,6 +402,15 @@ async def admin_update_user(user_id: int, data: UserUpdateData, user: dict = Dep
     sql += ' WHERE id = ?'; params.append(user_id); db.execute(sql, tuple(params)); db.commit()
     await manager.broadcast({"type": "admin_panel_update_required"})
     await manager.broadcast({"type": "full_update_required"}, [user_id])
+    return {"success": True}
+
+@app.delete("/api/admin/users/{user_id}")
+async def admin_delete_user(user_id: int, user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db.commit()
+    await manager.broadcast({"type": "admin_panel_update_required"})
     return {"success": True}
 
 class AdjustBalanceData(BaseModel): userId: int; amount: float; comment: str
