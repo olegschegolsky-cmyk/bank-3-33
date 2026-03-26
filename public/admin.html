@@ -130,19 +130,15 @@
       <h3 class="section-subheader">Створити нове завдання для всіх</h3>
       <div class="form-group">
         <input type="text" id="newTaskTitle" placeholder="Назва завдання">
-        <textarea id="newTaskDesc" placeholder="Опис та умови виконання"></textarea>
+        <textarea id="newTaskDesc" placeholder="Опис та умови виконання (напр., Надішліть скріншот в Telegram)"></textarea>
         <input type="number" id="newTaskReward" placeholder="Винагорода (грн)">
         <button onclick="createAdminTask()" class="styled-button action-btn">Опублікувати завдання</button>
       </div>
       <hr>
-      <h3 class="section-subheader">Видати винагороду користувачу</h3>
-      <div class="form-group form-grid">
-        <select id="rewardUserSelect"></select>
-        <select id="rewardTaskSelect"></select>
-        <button onclick="rewardUserTask()" class="styled-button action-btn warning full-width">Підтвердити та нарахувати бонус</button>
-      </div>
+      <h3 class="section-subheader">Заявки на перевірку (Від користувачів)</h3>
+      <div id="adminTaskRequestsList" class="data-list"></div>
       <hr>
-      <h3 class="section-subheader">Список активних завдань</h3>
+      <h3 class="section-subheader">Управління завданнями</h3>
       <div id="adminTasksList" class="data-list"></div>
     </div>
 
@@ -248,6 +244,6 @@
   </main>
 </div>
 
-<script src="script.js?v=7.0"></script>
+<script src="script.js?v=8.0"></script>
 </body>
 </html>

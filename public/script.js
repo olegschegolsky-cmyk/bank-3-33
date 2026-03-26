@@ -2,7 +2,7 @@ const PROD_URL = 'bank-3-33-production.up.railway.app';
 const API_BASE_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : `https://${PROD_URL}`;
 const WS_BASE_URL = window.location.hostname === 'localhost' ? 'ws://localhost:3001/ws' : `wss://${PROD_URL}/ws`;
 
-let appData = { currentUser: null, transactions: [], shopItems: [], leaderboard: [], deposits: [], exchange: null, completedTasks: [], adminTasks: [] };
+let appData = { currentUser: null, transactions: [], shopItems: [], leaderboard: [], deposits: [], exchange: null, completedTasks: [], adminTasks: [], pendingTasks: [] };
 let cart = [];
 let ws = null;
 let html5QrCode = null;
@@ -189,7 +189,11 @@ function getTransactionTitle(t) {
 const openModal = modalId => document.getElementById(modalId).style.display = 'flex';
 const closeModal = modalId => document.getElementById(modalId).style.display = 'none';
 
-async function showNewsModal() { openModal('newsModal'); updateActiveNavButton('news'); await loadNews(); }
+async function showNewsModal() {
+    openModal('newsModal');
+    updateActiveNavButton('news');
+    await loadNews();
+}
 
 async function loadNews() {
     try {
@@ -214,14 +218,18 @@ async function loadNews() {
     } catch (e) { console.error(e); }
 }
 
-function showTasksModal() { renderTasks(); openModal('tasksModal'); updateActiveNavButton('tasks'); }
+function showTasksModal() {
+    renderTasks();
+    openModal('tasksModal');
+    updateActiveNavButton('tasks');
+}
 
 function renderTasks() {
     const list = document.getElementById('tasksListContainer');
     let html = '';
     
     AUTO_TASKS.forEach(task => {
-        const isCompleted = appData.completedTasks.includes(task.key);
+        const isCompleted = appData.completedTasks && appData.completedTasks.includes(task.key);
         html += `
         <div class="task-card ${isCompleted ? 'completed' : ''}">
             <div class="task-header">
@@ -230,7 +238,7 @@ function renderTasks() {
             </div>
             <p class="task-desc">${task.desc}</p>
             <div class="task-status ${isCompleted ? 'done' : 'todo'}">
-                ${isCompleted ? '✅ Отримано' : '⏳ Виконайте в додатку'}
+                ${isCompleted ? '✅ Бонус отримано' : '⏳ Очікує виконання'}
             </div>
         </div>`;
     });
@@ -238,7 +246,18 @@ function renderTasks() {
     if (appData.adminTasks && appData.adminTasks.length > 0) {
         html += `<h4 style="margin-top:1.5rem; margin-bottom:1rem; text-align:center; color: var(--text-primary);">Ексклюзивні завдання</h4>`;
         appData.adminTasks.forEach(task => {
-            const isCompleted = appData.completedTasks.includes(`admin_${task.id}`);
+            const isCompleted = appData.completedTasks && appData.completedTasks.includes(`admin_${task.id}`);
+            const isPending = appData.pendingTasks && appData.pendingTasks.includes(task.id);
+            
+            let statusHtml = '';
+            if (isCompleted) {
+                statusHtml = `<div class="task-status done">✅ Бонус отримано</div>`;
+            } else if (isPending) {
+                statusHtml = `<div class="task-status todo" style="color:var(--warning-color);">⏳ На перевірці в адміна</div>`;
+            } else {
+                statusHtml = `<button class="action-button primary-button" style="width:100%; margin-top:0.75rem; padding:0.7rem; font-size:0.9rem;" onclick="submitTask(${task.id})">Підтвердити виконання</button>`;
+            }
+
             html += `
             <div class="task-card ${isCompleted ? 'completed' : ''}" style="border-left: 4px solid var(--warning-color);">
                 <div class="admin-task-badge">Від Адміна</div>
@@ -247,13 +266,24 @@ function renderTasks() {
                     <span class="task-reward">+${task.reward} грн</span>
                 </div>
                 <p class="task-desc">${task.description}</p>
-                <div class="task-status ${isCompleted ? 'done' : 'todo'}">
-                    ${isCompleted ? '✅ Бонус отримано' : '📝 Надішліть скріншот адміну'}
-                </div>
+                ${statusHtml}
             </div>`;
         });
     }
     list.innerHTML = html;
+}
+
+async function submitTask(taskId) {
+    if(!confirm('Ви впевнені, що виконали всі умови? Адміністратор перевірить це перед нарахуванням коштів.')) return;
+    try {
+        const r = await fetchWithAuth('/api/tasks/submit', {
+            method: 'POST',
+            body: JSON.stringify({ taskId: taskId })
+        });
+        const res = await r.json();
+        alert(res.message);
+        if(r.ok) loadInitialData();
+    } catch(e) { alert('Помилка при відправці заявки.'); }
 }
 
 function showSendMoney() { openModal('sendMoneyModal'); document.getElementById('sendAmount').value = ''; document.getElementById('sendTo').value = ''; document.getElementById('qr-reader-results').style.display = 'none'; }
@@ -294,7 +324,10 @@ function confirmDeposit() {
 function renderDeposits() {
     const list = document.getElementById('userDepositsList');
     if (!list) return;
-    if (!appData.deposits || appData.deposits.length === 0) { list.innerHTML = '<p class="no-transactions" style="padding:1rem;">У вас ще немає депозитів.</p>'; return; }
+    if (!appData.deposits || appData.deposits.length === 0) {
+        list.innerHTML = '<p class="no-transactions" style="padding:1rem;">У вас ще немає депозитів.</p>';
+        return;
+    }
     const now = new Date();
     list.innerHTML = appData.deposits.map(d => {
         const endTime = new Date(d.end_time.replace(' ', 'T') + 'Z');
@@ -304,6 +337,7 @@ function renderDeposits() {
         else if (d.status === 'cancelled') statusHtml = `<span style="color:var(--danger-color); font-weight:600;">Скасовано</span>`;
         else if (isMature) statusHtml = `<button class="action-button primary-button" style="padding:0.6rem; width:100%; margin-top:0.5rem;" onclick="claimDeposit(${d.id})">Забрати ${d.expected_payout.toFixed(2)} грн</button>`;
         else statusHtml = `<span style="color:var(--warning-color); font-weight:600;">До ${endTime.toLocaleString('uk-UA')}</span>`;
+        
         return `
         <div class="event-item" style="border-left-color: ${d.status === 'active' ? 'var(--warning-color)' : d.status === 'completed' ? 'var(--accent-color)' : 'var(--text-disabled)'};">
             <h4 style="margin-bottom:0.25rem;">Сума: ${d.amount.toFixed(2)} грн</h4>
@@ -313,16 +347,44 @@ function renderDeposits() {
     }).join('');
 }
 
-async function claimDeposit(id) { try { const response = await fetchWithAuth('/api/deposits/claim', { method: 'POST', body: JSON.stringify({ depositId: id }) }); const result = await response.json(); alert(result.message); } catch (e) { alert('Помилка виплати.'); } }
+async function claimDeposit(id) {
+    try {
+        const response = await fetchWithAuth('/api/deposits/claim', { method: 'POST', body: JSON.stringify({ depositId: id }) });
+        const result = await response.json();
+        alert(result.message);
+    } catch (e) { alert('Помилка виплати.'); }
+}
 
 async function showExchangeModal() { openModal('exchangeModal'); updateActiveNavButton('exchange'); await loadExchangeData(); }
-async function loadExchangeData() { try { const response = await fetchWithAuth('/api/exchange/data'); if (response.ok) { appData.exchange = await response.json(); renderExchangeTab(); } } catch (e) { console.error(e); } }
-function switchExchangeTab(tab) { currentExchangeTab = tab; document.querySelectorAll('.exchange-tab').forEach(b => b.classList.remove('active')); document.getElementById(`tab-${tab}`).classList.add('active'); document.getElementById('tradingZone').style.display = 'none'; currentAssetId = null; renderExchangeTab(); }
+async function loadExchangeData() {
+    try {
+        const response = await fetchWithAuth('/api/exchange/data');
+        if (response.ok) {
+            appData.exchange = await response.json();
+            renderExchangeTab();
+        }
+    } catch (e) { console.error(e); }
+}
+
+function switchExchangeTab(tab) {
+    currentExchangeTab = tab;
+    document.querySelectorAll('.exchange-tab').forEach(b => b.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    document.getElementById('tradingZone').style.display = 'none';
+    currentAssetId = null;
+    renderExchangeTab();
+}
+
 function renderExchangeTab() {
     if (!appData.exchange) return;
     const listContainer = document.getElementById('exchangeAssetList');
     const assets = appData.exchange.assets.filter(a => a.type === currentExchangeTab);
-    if (assets.length === 0) { listContainer.innerHTML = '<p class="no-transactions">Активи відсутні.</p>'; return; }
+    
+    if (assets.length === 0) {
+        listContainer.innerHTML = '<p class="no-transactions">Активи відсутні.</p>';
+        return;
+    }
+    
     listContainer.innerHTML = assets.map(a => `
         <div class="asset-card ${currentAssetId === a.id ? 'active' : ''}" onclick="selectAsset(${a.id})">
             <span class="asset-card-symbol">${a.symbol}</span>
@@ -330,6 +392,7 @@ function renderExchangeTab() {
             <span class="asset-card-price">${a.price.toFixed(2)} грн</span>
         </div>
     `).join('');
+    
     if (currentAssetId) selectAsset(currentAssetId);
     else selectAsset(assets[0].id);
 }
@@ -338,19 +401,23 @@ function selectAsset(id) {
     currentAssetId = id;
     const asset = appData.exchange.assets.find(a => a.id === id);
     if (!asset) return;
+    
     document.querySelectorAll('.asset-card').forEach(c => c.classList.remove('active'));
     const cards = document.querySelectorAll('.asset-card');
     const index = appData.exchange.assets.filter(a => a.type === currentExchangeTab).findIndex(a => a.id === id);
     if (cards[index]) cards[index].classList.add('active');
+    
     document.getElementById('tradingZone').style.display = 'block';
     document.getElementById('currentAssetName').textContent = `${asset.name} (${asset.symbol})`;
     document.getElementById('currentAssetPrice').textContent = `${asset.price.toFixed(2)} грн`;
+    
     const portItem = appData.exchange.portfolio.find(p => p.asset_id === id);
     document.getElementById('currentAssetOwned').textContent = portItem ? portItem.amount.toFixed(4) : '0';
+    
     drawChart(id, asset.name);
 }
 
-// === ЛОГІКА ЧЕРВОНОГО ГРАФІКА ПРИ ПАДІННІ ===
+// === ЛОГІКА ЧЕРВОНОГО ГРАФІКА ПРИ ПАДІННІ ВІД ОСТАННЬОГО МАРКЕРА ===
 function drawChart(assetId, assetName) {
     const ctx = document.getElementById('exchangeChart').getContext('2d');
     const historyData = appData.exchange.history[assetId] || [];
@@ -364,7 +431,7 @@ function drawChart(assetId, assetName) {
     let color = '#10b981'; // Зелений
     let bgColor = 'rgba(16, 185, 129, 0.1)';
 
-    // Перевірка: чи поточна ціна МЕНША за попередню ціну (від останнього маркера)
+    // Перевірка: чи поточна ціна (остання) МЕНША за попередню ціну (передостанню)
     if (dataPoints.length > 1) {
         const currentPrice = dataPoints[dataPoints.length - 1];
         const previousPrice = dataPoints[dataPoints.length - 2];
@@ -424,6 +491,7 @@ function executeTrade(type) {
     const asset = appData.exchange.assets.find(a => a.id === currentAssetId);
     const actionName = type === 'buy' ? 'Купити' : 'Продати';
     const totalCost = asset.price * amount;
+    
     document.getElementById('confirmMessage').textContent = `${actionName} ${amount} ${asset.symbol} за ~${totalCost.toFixed(2)} грн?`;
     confirmedActionCallback = async () => {
         try {
@@ -437,6 +505,7 @@ function executeTrade(type) {
 }
 
 function showShop() { populateShopItems(); openModal('shopModal'); updateActiveNavButton('shop'); }
+
 function showLeaderboard() {
     const list = document.getElementById('leaderboardList');
     if (!appData.leaderboard || appData.leaderboard.length === 0) {
@@ -468,8 +537,8 @@ function populateShopItems(sortBy = 'default') {
             <img src="${item.image || './logo.png'}" alt="${item.name}" class="shop-item-image">
             <h4 class="shop-item-name">${item.name}</h4>
             <div class="shop-item-price-container">
-                ${hasDiscount ? `<span class="shop-item-price-original">${item.price.toFixed(2)} грн</span>` : ''}
-                <span class="shop-item-price">${price.toFixed(2)} грн</span>
+                ${hasDiscount ? `<span class="shop-item-price-original">${(item.price || 0).toFixed(2)} грн</span>` : ''}
+                <span class="shop-item-price">${(price || 0).toFixed(2)} грн</span>
             </div>
             <button class="action-button add-to-cart-button">Додати</button>
         </div>`;
@@ -477,8 +546,20 @@ function populateShopItems(sortBy = 'default') {
 }
 
 function sortShopItems() { populateShopItems(document.getElementById('shopSort').value); }
-function addItemToCart(id, quantity) { const itemData = appData.shopItems.find(i => i.id == id); if (itemData.quantity < quantity) return alert('Товар закінчився.'); const existing = cart.find(i => i.id === id); if (existing) existing.quantity += quantity; else cart.push({ id, quantity }); localStorage.setItem(`cart_${appData.currentUser.id}`, JSON.stringify(cart)); updateCartModalItemCount(); alert(`${itemData.name} додано до кошика!`); }
+
+function addItemToCart(id, quantity) {
+    const itemData = appData.shopItems.find(i => i.id == id);
+    if (itemData.quantity < quantity) return alert('Товар закінчився.');
+    const existing = cart.find(i => i.id === id);
+    if (existing) existing.quantity += quantity;
+    else cart.push({ id, quantity });
+    localStorage.setItem(`cart_${appData.currentUser.id}`, JSON.stringify(cart));
+    updateCartModalItemCount();
+    alert(`${itemData.name} додано до кошика!`);
+}
+
 function updateCartModalItemCount() { document.getElementById('cartCountModal').textContent = cart.reduce((s, i) => s + i.quantity, 0); }
+
 function showCart() {
     const cartDiv = document.getElementById('cartItems');
     if (cart.length === 0) {
@@ -497,7 +578,10 @@ function showCart() {
             return `
             <div class="cart-item-display">
                 <img src="${itemData.image || './logo.png'}" class="cart-item-image">
-                <div class="cart-item-info"><h4>${itemData.name}</h4><p>${cartItem.quantity} x ${price.toFixed(2)} = ${itemTotal.toFixed(2)} грн</p></div>
+                <div class="cart-item-info">
+                    <h4>${itemData.name}</h4>
+                    <p>${cartItem.quantity} x ${(price || 0).toFixed(2)} = ${(itemTotal || 0).toFixed(2)} грн</p>
+                </div>
                 <button class="action-button danger-button" onclick="removeCartItem(${index})">X</button>
             </div>`;
         }).join('');
@@ -506,30 +590,104 @@ function showCart() {
     }
     openModal('cartModal');
 }
-function removeCartItem(index) { cart.splice(index, 1); localStorage.setItem(`cart_${appData.currentUser.id}`, JSON.stringify(cart)); showCart(); updateCartModalItemCount(); }
+
+function removeCartItem(index) {
+    cart.splice(index, 1);
+    localStorage.setItem(`cart_${appData.currentUser.id}`, JSON.stringify(cart));
+    showCart();
+    updateCartModalItemCount();
+}
+
 function checkoutCart() {
     document.getElementById('confirmMessage').textContent = 'Підтвердити покупку?';
     confirmedActionCallback = async () => {
-        try { const response = await fetchWithAuth('/api/purchase', { method: 'POST', body: JSON.stringify({ cart }), }); const result = await response.json(); alert(result.message); if (response.ok) { cart = []; localStorage.removeItem(`cart_${appData.currentUser.id}`); closeModal('cartModal'); } } catch (e) { alert('Помилка покупки.'); }
+        try {
+            const response = await fetchWithAuth('/api/purchase', { method: 'POST', body: JSON.stringify({ cart }), });
+            const result = await response.json();
+            alert(result.message);
+            if (response.ok) {
+                cart = [];
+                localStorage.removeItem(`cart_${appData.currentUser.id}`);
+                closeModal('cartModal');
+            }
+        } catch (e) { alert('Помилка покупки.'); }
     };
     openModal('confirmModal');
 }
-function showPersonalInfo() { const user = appData.currentUser; document.getElementById('passportName').textContent = user.full_name; document.getElementById('passportDOB').textContent = user.dob || '01.01.2000'; document.getElementById('passportTeam').textContent = user.team_name || 'Без команди'; openModal('personalModal'); updateActiveNavButton('personal'); }
+
+function showPersonalInfo() {
+    const user = appData.currentUser;
+    document.getElementById('passportName').textContent = user.full_name;
+    document.getElementById('passportDOB').textContent = user.dob || '01.01.2000';
+    document.getElementById('passportTeam').textContent = user.team_name || 'Без команди';
+    openModal('personalModal');
+    updateActiveNavButton('personal');
+}
+
 function showEventHistoryModal() {
     const list = document.getElementById('eventHistoryList');
-    if (!appData.transactions || appData.transactions.length === 0) { list.innerHTML = '<p class="no-transactions">Історія порожня.</p>'; } else {
+    if (!appData.transactions || appData.transactions.length === 0) {
+        list.innerHTML = '<p class="no-transactions">Історія порожня.</p>';
+    } else {
         list.innerHTML = appData.transactions.map(t => {
             const txDate = new Date(t.timestamp.replace(' ', 'T') + 'Z');
-            return `<div class="event-item ${t.type}"><h4>${getTransactionTitle(t)}</h4><p><strong>Сума:</strong> ${parseFloat(t.amount).toFixed(2)} грн</p><p><strong>Дата:</strong> ${txDate.toLocaleString('uk-UA')}</p></div>`;
+            return `
+            <div class="event-item ${t.type}">
+                <h4>${getTransactionTitle(t)}</h4>
+                <p><strong>Сума:</strong> ${(parseFloat(t.amount) || 0).toFixed(2)} грн</p>
+                <p><strong>Дата:</strong> ${txDate.toLocaleString('uk-UA')}</p>
+            </div>`;
         }).join('');
     }
     openModal('eventHistoryModal');
 }
-function showQrCodeModal() { const qrContainer = document.getElementById('qrcode-display'); qrContainer.innerHTML = ''; const qr = qrcode(0, 'L'); qr.addData(appData.currentUser.username); qr.make(); qrContainer.innerHTML = qr.createImgTag(6, 8); openModal('qrCodeModal'); }
-function startQrScanner() { if (!html5QrCode) html5QrCode = new Html5Qrcode("qr-reader"); stopQrScanner(); document.getElementById('qr-reader-results').style.display = 'none'; html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (decodedText) => { stopQrScanner(); document.getElementById('sendTo').value = decodedText; const resultsDiv = document.getElementById('qr-reader-results'); resultsDiv.textContent = `✅ Знайдено: ${decodedText}.`; resultsDiv.style.display = 'block'; }, (errorMessage) => { } ).catch(err => console.log('QR Error:', err)); }
-function stopQrScanner() { if (html5QrCode && html5QrCode.getState() === 2) { html5QrCode.stop().catch(err => console.log('Error', err)); } }
-function executeConfirmedAction() { if (typeof confirmedActionCallback === 'function') confirmedActionCallback(); closeModal('confirmModal'); }
-function updateActiveNavButton(screenName) { const mapping = { 'main': 1, 'shop': 2, 'exchange': 3, 'tasks': 4, 'news': 5, 'personal': 6 }; document.querySelectorAll('.bottom-nav .nav-btn').forEach(b => b.classList.remove('active')); const btn = document.querySelector(`.bottom-nav .nav-btn:nth-child(${mapping[screenName] || 1})`); if (btn) btn.classList.add('active'); }
+
+function showQrCodeModal() {
+    const qrContainer = document.getElementById('qrcode-display');
+    qrContainer.innerHTML = '';
+    const qr = qrcode(0, 'L');
+    qr.addData(appData.currentUser.username);
+    qr.make();
+    qrContainer.innerHTML = qr.createImgTag(6, 8);
+    openModal('qrCodeModal');
+}
+
+function startQrScanner() {
+    if (!html5QrCode) html5QrCode = new Html5Qrcode("qr-reader");
+    stopQrScanner();
+    document.getElementById('qr-reader-results').style.display = 'none';
+    html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+            stopQrScanner();
+            document.getElementById('sendTo').value = decodedText;
+            const resultsDiv = document.getElementById('qr-reader-results');
+            resultsDiv.textContent = `✅ Знайдено: ${decodedText}.`;
+            resultsDiv.style.display = 'block';
+        },
+        (errorMessage) => { }
+    ).catch(err => console.log('QR Error:', err));
+}
+
+function stopQrScanner() {
+    if (html5QrCode && html5QrCode.getState() === 2) {
+        html5QrCode.stop().catch(err => console.log('Error', err));
+    }
+}
+
+function executeConfirmedAction() {
+    if (typeof confirmedActionCallback === 'function') confirmedActionCallback();
+    closeModal('confirmModal');
+}
+
+function updateActiveNavButton(screenName) {
+    const mapping = { 'main': 1, 'shop': 2, 'exchange': 3, 'tasks': 4, 'news': 5, 'personal': 6 };
+    document.querySelectorAll('.bottom-nav .nav-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`.bottom-nav .nav-btn:nth-child(${mapping[screenName] || 1})`);
+    if (btn) btn.classList.add('active');
+}
+
 function flipCard() { document.querySelector('.card').classList.toggle('flipped'); }
 const showMainScreen = () => { document.querySelectorAll('.modal').forEach(m => closeModal(m.id)); updateActiveNavButton('main'); };
 
@@ -656,24 +814,39 @@ async function deleteAdminNews(id) {
 async function loadAdminTasks() {
     try {
         const res = await fetchWithAuth('/api/admin/tasks');
-        if(!res.ok) throw new Error('Error');
+        if(!res.ok) throw new Error('Error fetching tasks');
         const tasks = await res.json();
+        
         const list = document.getElementById('adminTasksList');
         if (list) {
             list.innerHTML = tasks.map(t => `
-                <div class="data-item">
-                    <span><strong>${t.title}</strong> | Нагорода: ${t.reward} грн <br><small>${t.description}</small></span>
-                    <button onclick="deleteAdminTask(${t.id})" class="styled-button action-btn danger">Видалити</button>
+                <div class="data-item" style="${t.is_active ? '' : 'opacity:0.6;'}">
+                    <span><strong>${t.title}</strong> | Нагорода: ${t.reward} грн <br>
+                    <small>Статус: ${t.is_active ? '🟢 Активне' : '🔴 Вимкнене'}</small></span>
+                    <div class="button-group">
+                        <button onclick="toggleAdminTask(${t.id})" class="styled-button action-btn warning">${t.is_active ? 'Вимкнути' : 'Увімкнути'}</button>
+                        <button onclick="deleteAdminTask(${t.id})" class="styled-button action-btn danger">Видалити</button>
+                    </div>
                 </div>`).join('');
         }
-        await loadAdminUsers();
-        const userSelect = document.getElementById('rewardUserSelect');
-        const taskSelect = document.getElementById('rewardTaskSelect');
-        if (userSelect && adminData.users) {
-            userSelect.innerHTML = '<option value="">Оберіть користувача</option>' + adminData.users.map(u => `<option value="${u.id}">${u.full_name}</option>`).join('');
-        }
-        if (taskSelect) {
-            taskSelect.innerHTML = '<option value="">Оберіть завдання</option>' + tasks.map(t => `<option value="${t.id}">${t.title}</option>`).join('');
+        
+        const reqRes = await fetchWithAuth('/api/admin/task-requests');
+        const reqs = await reqRes.json();
+        const reqList = document.getElementById('adminTaskRequestsList');
+        if(reqList) {
+            if(reqs.length === 0) reqList.innerHTML = '<p>Немає нових заявок на перевірку.</p>';
+            else {
+                reqList.innerHTML = reqs.map(r => `
+                    <div class="data-item">
+                        <span>Користувач <strong>${r.full_name}</strong> виконав <strong>"${r.title}"</strong><br>
+                        <small>Очікувана нагорода: ${r.reward} грн</small></span>
+                        <div class="button-group">
+                            <button onclick="processTaskRequest(${r.id}, 'approve')" class="styled-button action-btn" style="background-color:var(--accent-color);">Нарахувати</button>
+                            <button onclick="processTaskRequest(${r.id}, 'reject')" class="styled-button action-btn danger">Відхилити</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
         }
     } catch (e) { console.error(e); }
 }
@@ -695,22 +868,26 @@ async function createAdminTask() {
     } else { alert('Помилка'); }
 }
 
+async function toggleAdminTask(id) {
+    const r = await fetchWithAuth(`/api/admin/tasks/${id}/toggle`, { method: 'PUT' });
+    if(r.ok) showSection('tasks'); else alert('Помилка');
+}
+
 async function deleteAdminTask(id) {
     if (!confirm('Видалити завдання?')) return;
     const r = await fetchWithAuth(`/api/admin/tasks/${id}`, { method: 'DELETE' });
     if (r.ok) showSection('tasks'); else alert('Помилка');
 }
 
-async function rewardUserTask() {
-    const data = {
-        userId: parseInt(document.getElementById('rewardUserSelect').value),
-        taskId: parseInt(document.getElementById('rewardTaskSelect').value)
-    };
-    if (!data.userId || !data.taskId) return alert('Оберіть користувача та завдання!');
-    const r = await fetchWithAuth('/api/admin/tasks/reward', { method: 'POST', body: JSON.stringify(data) });
-    const result = await r.json();
-    if (r.ok) { alert('Винагороду успішно нараховано!'); } else { alert(result.message || 'Помилка'); }
+async function processTaskRequest(id, action) {
+    if(action === 'reject' && !confirm('Відхилити заявку? Користувач зможе відправити її ще раз після відхилення.')) return;
+    const r = await fetchWithAuth('/api/admin/task-requests/process', { 
+        method: 'POST', 
+        body: JSON.stringify({ requestId: id, action: action }) 
+    });
+    if(r.ok) showSection('tasks'); else alert('Помилка');
 }
+
 
 async function createUser() {
     const user = {
