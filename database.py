@@ -103,15 +103,8 @@ def initialize_db():
             cursor.execute('INSERT INTO exchange_assets (name, symbol, type, price, volatility) VALUES (?, ?, ?, ?, ?)', asset)
             cursor.execute('INSERT INTO price_history (asset_id, price) VALUES (?, ?)', (cursor.lastrowid, asset[3]))
 
-    if cursor.execute('SELECT COUNT(*) FROM admin_tasks').fetchone()[0] == 0:
-        default_tasks = [
-            ('Перший депозит', 'Покладіть кошти на депозит (від 150 грн).', 100),
-            ('Перший переказ', 'Надішліть кошти іншому користувачу (від 100 грн).', 200),
-            ('Купити акції', 'Придбайте акції на біржі (від 3 шт).', 180),
-            ('Купити криптовалюту', 'Придбайте криптовалюту на біржі (від 3 шт).', 120)
-        ]
-        for t in default_tasks:
-            cursor.execute('INSERT INTO admin_tasks (title, description, reward) VALUES (?, ?, ?)', t)
+    # Видаляємо стандартні завдання з панелі адміна, щоб вони не дублювалися і працювали автоматично
+    cursor.execute("DELETE FROM admin_tasks WHERE title IN ('Перший депозит', 'Перший переказ', 'Купити акції', 'Купити криптовалюту')")
 
     db.commit()
 
@@ -173,6 +166,13 @@ def perform_transfer(from_user_id: int, to_user_id: int, amount: float, comment:
         to_user_name = cursor.execute('SELECT full_name FROM users WHERE id = ?', (to_user_id,)).fetchone()['full_name']
         cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (from_user_id, 'transfer', -amount, to_user_name, comment))
         cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (to_user_id, 'transfer', amount, from_user['full_name'], comment))
+        
+        # АВТО-ЗАВДАННЯ: Переказ
+        if amount >= 100 and not cursor.execute("SELECT id FROM completed_tasks WHERE user_id = ? AND task_key = 'auto_transfer'", (from_user_id,)).fetchone():
+            cursor.execute("INSERT INTO completed_tasks (user_id, task_key) VALUES (?, 'auto_transfer')", (from_user_id,))
+            cursor.execute("UPDATE users SET balance = balance + 200 WHERE id = ?", (from_user_id,))
+            cursor.execute("INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, 'task_reward', 200, 'Система', 'Нагорода за завдання: Перший переказ')", (from_user_id,))
+            
         db.commit(); return {"success": True, "message": "Переказ успішний"}
     except Exception as e: db.rollback(); raise e
 
@@ -197,6 +197,13 @@ def create_deposit(user_id: int, amount: float, days: int):
         cursor.execute('UPDATE users SET balance = balance - ? WHERE id = ?', (amount, user_id))
         cursor.execute('''INSERT INTO deposits (user_id, amount, expected_payout, end_time) VALUES (?, ?, ?, datetime('now', ?))''', (user_id, amount, payout, f'+{days} days'))
         cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (user_id, 'deposit', -amount, 'Банк', f'Депозит на {days} дн.'))
+        
+        # АВТО-ЗАВДАННЯ: Депозит
+        if amount >= 150 and not cursor.execute("SELECT id FROM completed_tasks WHERE user_id = ? AND task_key = 'auto_deposit'", (user_id,)).fetchone():
+            cursor.execute("INSERT INTO completed_tasks (user_id, task_key) VALUES (?, 'auto_deposit')", (user_id,))
+            cursor.execute("UPDATE users SET balance = balance + 100 WHERE id = ?", (user_id,))
+            cursor.execute("INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, 'task_reward', 100, 'Система', 'Нагорода за завдання: Перший депозит')", (user_id,))
+            
         db.commit(); return {"success": True, "message": "Депозит відкрито."}
     except Exception as e: db.rollback(); raise e
 

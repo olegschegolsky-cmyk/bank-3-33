@@ -11,6 +11,7 @@ import shutil
 
 JWT_SECRET = 'your_super_secret_key_for_ceo_bank_project'
 app = FastAPI()
+
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 class ConnectionManager:
@@ -124,7 +125,7 @@ async def exchange_buy(data: ExchangeTradeData, user: dict = Depends(get_current
         total_cost = asset["price"] * data.amount
         u = cursor.execute("SELECT balance FROM users WHERE id = ?", (user["id"],)).fetchone()
         if u["balance"] < total_cost:
-            db.rollback(); return JSONResponse(status_code=400, content={"message": f"Недостатньо коштів."})
+            db.rollback(); return JSONResponse(status_code=400, content={"message": f"Недостатньо коштів. Потрібно {total_cost:.2f} грн."})
         cursor.execute("UPDATE users SET balance = balance - ? WHERE id = ?", (total_cost, user["id"]))
         port = cursor.execute("SELECT amount FROM user_portfolio WHERE user_id = ? AND asset_id = ?", (user["id"], data.assetId)).fetchone()
         if port: cursor.execute("UPDATE user_portfolio SET amount = amount + ? WHERE user_id = ? AND asset_id = ?", (data.amount, user["id"], data.assetId))
@@ -133,11 +134,22 @@ async def exchange_buy(data: ExchangeTradeData, user: dict = Depends(get_current
         cursor.execute("UPDATE exchange_assets SET price = ? WHERE id = ?", (new_price, data.assetId))
         cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (data.assetId, new_price))
         cursor.execute("INSERT INTO exchange_transactions (user_id, asset_id, type, amount, price_per_unit, total_cost) VALUES (?, ?, 'buy', ?, ?, ?)", (user["id"], data.assetId, data.amount, asset["price"], total_cost))
+        
+        # АВТО-ЗАВДАННЯ: Купівля на біржі
+        if data.amount >= 3:
+            task_k = 'auto_crypto' if asset['type'] == 'crypto' else 'auto_stock'
+            reward = 120.0 if asset['type'] == 'crypto' else 180.0
+            title = 'Купівля криптовалюти' if asset['type'] == 'crypto' else 'Купівля акцій'
+            if not cursor.execute("SELECT id FROM completed_tasks WHERE user_id = ? AND task_key = ?", (user["id"], task_k)).fetchone():
+                cursor.execute("INSERT INTO completed_tasks (user_id, task_key) VALUES (?, ?)", (user["id"], task_k))
+                cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (reward, user["id"]))
+                cursor.execute("INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, 'task_reward', ?, 'Система', ?)", (user["id"], reward, f'Нагорода за завдання: {title}'))
+
         db.commit()
         await manager.broadcast({"type": "full_update_required"}, [user["id"]])
         await manager.broadcast({"type": "exchange_update_required"})
         return {"success": True, "message": f"Куплено {data.amount} {asset['symbol']}"}
-    except Exception as e: db.rollback(); return JSONResponse(status_code=400, content={"message": str(e)})
+    except Exception as e: db.rollback(); return JSONResponse(status_code=400, content={"message": "Помилка: " + str(e)})
 
 @app.post("/api/exchange/sell")
 async def exchange_sell(data: ExchangeTradeData, user: dict = Depends(get_current_user)):
@@ -160,7 +172,7 @@ async def exchange_sell(data: ExchangeTradeData, user: dict = Depends(get_curren
         await manager.broadcast({"type": "full_update_required"}, [user["id"]])
         await manager.broadcast({"type": "exchange_update_required"})
         return {"success": True, "message": f"Продано {data.amount} {asset['symbol']}"}
-    except Exception as e: db.rollback(); return JSONResponse(status_code=400, content={"message": str(e)})
+    except Exception as e: db.rollback(); return JSONResponse(status_code=400, content={"message": "Помилка: " + str(e)})
 
 @app.get("/api/news")
 def get_news(user: dict = Depends(get_current_user)): return [dict(n) for n in database.get_db().execute("SELECT * FROM news ORDER BY timestamp DESC").fetchall()]
@@ -274,8 +286,7 @@ async def admin_update_asset(data: AdminAssetUpdate, user: dict = Depends(get_cu
     db = database.get_db(); cursor = db.cursor()
     cursor.execute("UPDATE exchange_assets SET price = ?, volatility = ? WHERE id = ?", (data.price, data.volatility, data.assetId))
     cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (data.assetId, data.price))
-    db.commit()
-    await manager.broadcast({"type": "exchange_update_required"}); await manager.broadcast({"type": "admin_panel_update_required"})
+    db.commit(); await manager.broadcast({"type": "exchange_update_required"}); await manager.broadcast({"type": "admin_panel_update_required"})
     return {"success": True}
 
 class AdminCreateAssetData(BaseModel): name: str; symbol: str; type: str; price: float; volatility: float
