@@ -15,8 +15,8 @@ let currentAssetId = null;
 let currentChartAssetId = null;
 
 const AUTO_TASKS = [
-    { key: 'auto_deposit', title: 'Зробити перший депозит', desc: 'Покладіть кошти на депозит (від 150 грн) вперше.', reward: 100 },
-    { key: 'auto_transfer', title: 'Зробити перший переказ', desc: 'Надішліть кошти іншому користувачу (від 100 грн).', reward: 200 },
+    { key: 'auto_deposit', title: 'Перший депозит', desc: 'Покладіть кошти на депозит (від 150 грн).', reward: 100 },
+    { key: 'auto_transfer', title: 'Перший переказ', desc: 'Надішліть кошти іншому (від 100 грн).', reward: 200 },
     { key: 'auto_stock', title: 'Купити акції', desc: 'Придбайте акції на біржі (від 3 шт).', reward: 180 },
     { key: 'auto_crypto', title: 'Купити криптовалюту', desc: 'Придбайте криптовалюту на біржі (від 3 шт).', reward: 120 }
 ];
@@ -78,12 +78,8 @@ async function login() {
             document.getElementById('menu').style.display = 'flex';
             document.getElementById('bottom-bar').style.display = 'flex';
             initializeWebSocket();
-        } else {
-            alert(result.message || 'Помилка входу.');
-        }
-    } catch (error) {
-        alert('Не вдалося підключитися.');
-    }
+        } else { alert(result.message || 'Помилка входу.'); }
+    } catch (error) { alert('Не вдалося підключитися.'); }
 }
 
 async function adminLogin() {
@@ -101,41 +97,24 @@ async function adminLogin() {
             document.getElementById('adminPanel').style.display = 'flex';
             showSection('users');
             initializeWebSocket();
-        } else {
-            alert(result.message || 'Помилка входу.');
-        }
-    } catch (error) {
-        alert('Помилка підключення.');
-    }
+        } else { alert(result.message || 'Помилка входу.'); }
+    } catch (error) { alert('Помилка підключення.'); }
 }
 
-function logout() {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('isAdmin');
-    if (ws) ws.close();
-    window.location.href = 'index.html';
-}
-
-function adminLogout() {
-    logout();
-}
+function logout() { localStorage.removeItem('authToken'); localStorage.removeItem('isAdmin'); if (ws) ws.close(); window.location.href = 'index.html'; }
+function adminLogout() { logout(); }
 
 async function loadInitialData() {
     try {
         const response = await fetchWithAuth('/api/app-data');
-        if (!response.ok) {
-            if (response.status === 401 || response.status === 403) logout();
-            return;
-        }
+        if (!response.ok) { if (response.status === 401 || response.status === 403) logout(); return; }
         appData = await response.json();
         cart = JSON.parse(localStorage.getItem(`cart_${appData.currentUser.id}`)) || [];
         updateAllDisplays();
         if (document.getElementById('depositModal').style.display === 'flex') renderDeposits();
         if (document.getElementById('exchangeModal').style.display === 'flex') loadExchangeData();
         if (document.getElementById('tasksModal').style.display === 'flex') renderTasks();
-    } catch (error) {
-        console.error('Failed to load data:', error);
-    }
+    } catch (error) { console.error('Failed to load data:', error); }
 }
 
 function updateAllDisplays() {
@@ -145,8 +124,7 @@ function updateAllDisplays() {
     document.getElementById('userName').textContent = user.full_name;
     const balanceValue = (user.balance || 0).toFixed(2);
     ['balance', 'balanceSendMoney', 'balanceShop', 'balanceDeposit', 'balanceExchange'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = balanceValue;
+        const el = document.getElementById(id); if (el) el.textContent = balanceValue;
     });
     document.getElementById('cvvCode').textContent = "123";
     updateTransactionHistoryDisplay();
@@ -211,11 +189,7 @@ function getTransactionTitle(t) {
 const openModal = modalId => document.getElementById(modalId).style.display = 'flex';
 const closeModal = modalId => document.getElementById(modalId).style.display = 'none';
 
-async function showNewsModal() {
-    openModal('newsModal');
-    updateActiveNavButton('news');
-    await loadNews();
-}
+async function showNewsModal() { openModal('newsModal'); updateActiveNavButton('news'); await loadNews(); }
 
 async function loadNews() {
     try {
@@ -237,16 +211,10 @@ async function loadNews() {
                 </div>`;
             }).join('');
         }
-    } catch (e) {
-        console.error(e);
-    }
+    } catch (e) { console.error(e); }
 }
 
-function showTasksModal() {
-    renderTasks();
-    openModal('tasksModal');
-    updateActiveNavButton('tasks');
-}
+function showTasksModal() { renderTasks(); openModal('tasksModal'); updateActiveNavButton('tasks'); }
 
 function renderTasks() {
     const list = document.getElementById('tasksListContainer');
@@ -262,7 +230,7 @@ function renderTasks() {
             </div>
             <p class="task-desc">${task.desc}</p>
             <div class="task-status ${isCompleted ? 'done' : 'todo'}">
-                ${isCompleted ? '✅ Бонус отримано' : '⏳ Очікує виконання'}
+                ${isCompleted ? '✅ Отримано' : '⏳ Виконайте в додатку'}
             </div>
         </div>`;
     });
@@ -272,8 +240,9 @@ function renderTasks() {
         appData.adminTasks.forEach(task => {
             const isCompleted = appData.completedTasks.includes(`admin_${task.id}`);
             html += `
-            <div class="task-card ${isCompleted ? 'completed' : ''}" style="border-left: 4px solid var(--primary-color);">
-                <div class="task-header">
+            <div class="task-card ${isCompleted ? 'completed' : ''}" style="border-left: 4px solid var(--warning-color);">
+                <div class="admin-task-badge">Від Адміна</div>
+                <div class="task-header" style="margin-top: 0.5rem;">
                     <h4 class="task-title">⭐ ${task.title}</h4>
                     <span class="task-reward">+${task.reward} грн</span>
                 </div>
@@ -287,13 +256,7 @@ function renderTasks() {
     list.innerHTML = html;
 }
 
-function showSendMoney() {
-    openModal('sendMoneyModal');
-    document.getElementById('sendAmount').value = '';
-    document.getElementById('sendTo').value = '';
-    document.getElementById('qr-reader-results').style.display = 'none';
-}
-
+function showSendMoney() { openModal('sendMoneyModal'); document.getElementById('sendAmount').value = ''; document.getElementById('sendTo').value = ''; document.getElementById('qr-reader-results').style.display = 'none'; }
 async function confirmSendMoney() {
     const amount = parseFloat(document.getElementById('sendAmount').value);
     const recipientFullName = document.getElementById('sendTo').value.trim();
@@ -306,20 +269,12 @@ async function confirmSendMoney() {
             const result = await response.json();
             alert(result.message);
             if (response.ok) closeModal('sendMoneyModal');
-        } catch (e) {
-            alert('Помилка переказу.');
-        }
+        } catch (e) { alert('Помилка переказу.'); }
     };
     openModal('confirmModal');
 }
 
-function showDepositModal() {
-    const amountInput = document.getElementById('depositAmount');
-    if (amountInput) amountInput.value = '';
-    renderDeposits();
-    openModal('depositModal');
-}
-
+function showDepositModal() { const amountInput = document.getElementById('depositAmount'); if (amountInput) amountInput.value = ''; renderDeposits(); openModal('depositModal'); }
 function confirmDeposit() {
     const amount = parseFloat(document.getElementById('depositAmount').value);
     const days = parseInt(document.getElementById('depositDays').value);
@@ -331,9 +286,7 @@ function confirmDeposit() {
             const result = await response.json();
             alert(result.message);
             if (response.ok) closeModal('confirmModal');
-        } catch (e) {
-            alert('Помилка відкриття депозиту.');
-        }
+        } catch (e) { alert('Помилка відкриття депозиту.'); }
     };
     openModal('confirmModal');
 }
@@ -341,10 +294,7 @@ function confirmDeposit() {
 function renderDeposits() {
     const list = document.getElementById('userDepositsList');
     if (!list) return;
-    if (!appData.deposits || appData.deposits.length === 0) {
-        list.innerHTML = '<p class="no-transactions" style="padding:1rem;">У вас ще немає депозитів.</p>';
-        return;
-    }
+    if (!appData.deposits || appData.deposits.length === 0) { list.innerHTML = '<p class="no-transactions" style="padding:1rem;">У вас ще немає депозитів.</p>'; return; }
     const now = new Date();
     list.innerHTML = appData.deposits.map(d => {
         const endTime = new Date(d.end_time.replace(' ', 'T') + 'Z');
@@ -354,7 +304,6 @@ function renderDeposits() {
         else if (d.status === 'cancelled') statusHtml = `<span style="color:var(--danger-color); font-weight:600;">Скасовано</span>`;
         else if (isMature) statusHtml = `<button class="action-button primary-button" style="padding:0.6rem; width:100%; margin-top:0.5rem;" onclick="claimDeposit(${d.id})">Забрати ${d.expected_payout.toFixed(2)} грн</button>`;
         else statusHtml = `<span style="color:var(--warning-color); font-weight:600;">До ${endTime.toLocaleString('uk-UA')}</span>`;
-        
         return `
         <div class="event-item" style="border-left-color: ${d.status === 'active' ? 'var(--warning-color)' : d.status === 'completed' ? 'var(--accent-color)' : 'var(--text-disabled)'};">
             <h4 style="margin-bottom:0.25rem;">Сума: ${d.amount.toFixed(2)} грн</h4>
@@ -364,53 +313,16 @@ function renderDeposits() {
     }).join('');
 }
 
-async function claimDeposit(id) {
-    try {
-        const response = await fetchWithAuth('/api/deposits/claim', { method: 'POST', body: JSON.stringify({ depositId: id }) });
-        const result = await response.json();
-        alert(result.message);
-    } catch (e) {
-        alert('Помилка виплати.');
-    }
-}
+async function claimDeposit(id) { try { const response = await fetchWithAuth('/api/deposits/claim', { method: 'POST', body: JSON.stringify({ depositId: id }) }); const result = await response.json(); alert(result.message); } catch (e) { alert('Помилка виплати.'); } }
 
-async function showExchangeModal() {
-    openModal('exchangeModal');
-    updateActiveNavButton('exchange');
-    await loadExchangeData();
-}
-
-async function loadExchangeData() {
-    try {
-        const response = await fetchWithAuth('/api/exchange/data');
-        if (response.ok) {
-            appData.exchange = await response.json();
-            renderExchangeTab();
-        }
-    } catch (e) {
-        console.error(e);
-    }
-}
-
-function switchExchangeTab(tab) {
-    currentExchangeTab = tab;
-    document.querySelectorAll('.exchange-tab').forEach(b => b.classList.remove('active'));
-    document.getElementById(`tab-${tab}`).classList.add('active');
-    document.getElementById('tradingZone').style.display = 'none';
-    currentAssetId = null;
-    renderExchangeTab();
-}
-
+async function showExchangeModal() { openModal('exchangeModal'); updateActiveNavButton('exchange'); await loadExchangeData(); }
+async function loadExchangeData() { try { const response = await fetchWithAuth('/api/exchange/data'); if (response.ok) { appData.exchange = await response.json(); renderExchangeTab(); } } catch (e) { console.error(e); } }
+function switchExchangeTab(tab) { currentExchangeTab = tab; document.querySelectorAll('.exchange-tab').forEach(b => b.classList.remove('active')); document.getElementById(`tab-${tab}`).classList.add('active'); document.getElementById('tradingZone').style.display = 'none'; currentAssetId = null; renderExchangeTab(); }
 function renderExchangeTab() {
     if (!appData.exchange) return;
     const listContainer = document.getElementById('exchangeAssetList');
     const assets = appData.exchange.assets.filter(a => a.type === currentExchangeTab);
-    
-    if (assets.length === 0) {
-        listContainer.innerHTML = '<p class="no-transactions">Активи відсутні.</p>';
-        return;
-    }
-    
+    if (assets.length === 0) { listContainer.innerHTML = '<p class="no-transactions">Активи відсутні.</p>'; return; }
     listContainer.innerHTML = assets.map(a => `
         <div class="asset-card ${currentAssetId === a.id ? 'active' : ''}" onclick="selectAsset(${a.id})">
             <span class="asset-card-symbol">${a.symbol}</span>
@@ -418,34 +330,27 @@ function renderExchangeTab() {
             <span class="asset-card-price">${a.price.toFixed(2)} грн</span>
         </div>
     `).join('');
-    
-    if (currentAssetId) {
-        selectAsset(currentAssetId);
-    } else {
-        selectAsset(assets[0].id);
-    }
+    if (currentAssetId) selectAsset(currentAssetId);
+    else selectAsset(assets[0].id);
 }
 
 function selectAsset(id) {
     currentAssetId = id;
     const asset = appData.exchange.assets.find(a => a.id === id);
     if (!asset) return;
-    
     document.querySelectorAll('.asset-card').forEach(c => c.classList.remove('active'));
     const cards = document.querySelectorAll('.asset-card');
     const index = appData.exchange.assets.filter(a => a.type === currentExchangeTab).findIndex(a => a.id === id);
     if (cards[index]) cards[index].classList.add('active');
-    
     document.getElementById('tradingZone').style.display = 'block';
     document.getElementById('currentAssetName').textContent = `${asset.name} (${asset.symbol})`;
     document.getElementById('currentAssetPrice').textContent = `${asset.price.toFixed(2)} грн`;
-    
     const portItem = appData.exchange.portfolio.find(p => p.asset_id === id);
     document.getElementById('currentAssetOwned').textContent = portItem ? portItem.amount.toFixed(4) : '0';
-    
     drawChart(id, asset.name);
 }
 
+// === ЛОГІКА ЧЕРВОНОГО ГРАФІКА ПРИ ПАДІННІ ===
 function drawChart(assetId, assetName) {
     const ctx = document.getElementById('exchangeChart').getContext('2d');
     const historyData = appData.exchange.history[assetId] || [];
@@ -456,14 +361,15 @@ function drawChart(assetId, assetName) {
     });
     const dataPoints = historyData.map(h => h.price);
 
-    let color = '#10b981';
+    let color = '#10b981'; // Зелений
     let bgColor = 'rgba(16, 185, 129, 0.1)';
 
+    // Перевірка: чи поточна ціна МЕНША за попередню ціну (від останнього маркера)
     if (dataPoints.length > 1) {
         const currentPrice = dataPoints[dataPoints.length - 1];
         const previousPrice = dataPoints[dataPoints.length - 2];
         if (currentPrice < previousPrice) {
-            color = '#ef4444';
+            color = '#ef4444'; // Червоний
             bgColor = 'rgba(239, 68, 68, 0.1)';
         }
     }
@@ -502,20 +408,11 @@ function drawChart(assetId, assetName) {
             animation: { duration: 800, easing: 'easeOutQuart' },
             scales: {
                 x: { display: false },
-                y: { 
-                    ticks: { color: '#9ca3af', font: { family: 'Inter' } },
-                    grid: { color: 'rgba(255,255,255,0.05)' }
-                }
+                y: { ticks: { color: '#9ca3af', font: { family: 'Inter' } }, grid: { color: 'rgba(255,255,255,0.05)' } }
             },
             plugins: {
                 legend: { display: false },
-                tooltip: {
-                    backgroundColor: 'rgba(31, 41, 55, 0.9)',
-                    titleColor: '#fff',
-                    bodyColor: color,
-                    bodyFont: { weight: 'bold' },
-                    callbacks: { label: (ctx) => `${ctx.raw.toFixed(2)} грн` }
-                }
+                tooltip: { backgroundColor: 'rgba(31, 41, 55, 0.9)', titleColor: '#fff', bodyColor: color, bodyFont: { weight: 'bold' }, callbacks: { label: (ctx) => `${ctx.raw.toFixed(2)} грн` } }
             }
         }
     });
@@ -527,28 +424,19 @@ function executeTrade(type) {
     const asset = appData.exchange.assets.find(a => a.id === currentAssetId);
     const actionName = type === 'buy' ? 'Купити' : 'Продати';
     const totalCost = asset.price * amount;
-    
     document.getElementById('confirmMessage').textContent = `${actionName} ${amount} ${asset.symbol} за ~${totalCost.toFixed(2)} грн?`;
     confirmedActionCallback = async () => {
         try {
-            const response = await fetchWithAuth(`/api/exchange/${type}`, {
-                method: 'POST', body: JSON.stringify({ assetId: currentAssetId, amount })
-            });
+            const response = await fetchWithAuth(`/api/exchange/${type}`, { method: 'POST', body: JSON.stringify({ assetId: currentAssetId, amount }) });
             const result = await response.json();
             alert(result.message);
-            if (response.ok) {
-                document.getElementById('tradeAmount').value = '';
-                closeModal('confirmModal');
-            }
-        } catch (e) {
-            alert('Помилка торгів.');
-        }
+            if (response.ok) { document.getElementById('tradeAmount').value = ''; closeModal('confirmModal'); }
+        } catch (e) { alert('Помилка торгів.'); }
     };
     openModal('confirmModal');
 }
 
 function showShop() { populateShopItems(); openModal('shopModal'); updateActiveNavButton('shop'); }
-
 function showLeaderboard() {
     const list = document.getElementById('leaderboardList');
     if (!appData.leaderboard || appData.leaderboard.length === 0) {
@@ -557,7 +445,7 @@ function showLeaderboard() {
         list.innerHTML = appData.leaderboard.map((u, index) => `
         <div class="event-item" style="border-left-color: ${index === 0 ? '#fbbf24' : index === 1 ? '#94a3b8' : index === 2 ? '#b45309' : 'var(--primary-color)'};">
             <h4><span style="font-size: 1.2rem; margin-right: 0.5rem;">${index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`}</span> ${u.full_name}</h4>
-            <p style="margin-top: 0.5rem;"><strong>Баланс:</strong> ${parseFloat(u.balance).toFixed(2)} грн</p>
+            <p style="margin-top: 0.5rem;"><strong>Баланс:</strong> ${(u.balance || 0).toFixed(2)} грн</p>
             ${u.team_name ? `<p><strong>Команда:</strong> ${u.team_name}</p>` : ''}
         </div>`).join('');
     }
@@ -589,20 +477,8 @@ function populateShopItems(sortBy = 'default') {
 }
 
 function sortShopItems() { populateShopItems(document.getElementById('shopSort').value); }
-
-function addItemToCart(id, quantity) {
-    const itemData = appData.shopItems.find(i => i.id == id);
-    if (itemData.quantity < quantity) return alert('Товар закінчився.');
-    const existing = cart.find(i => i.id === id);
-    if (existing) existing.quantity += quantity;
-    else cart.push({ id, quantity });
-    localStorage.setItem(`cart_${appData.currentUser.id}`, JSON.stringify(cart));
-    updateCartModalItemCount();
-    alert(`${itemData.name} додано до кошика!`);
-}
-
+function addItemToCart(id, quantity) { const itemData = appData.shopItems.find(i => i.id == id); if (itemData.quantity < quantity) return alert('Товар закінчився.'); const existing = cart.find(i => i.id === id); if (existing) existing.quantity += quantity; else cart.push({ id, quantity }); localStorage.setItem(`cart_${appData.currentUser.id}`, JSON.stringify(cart)); updateCartModalItemCount(); alert(`${itemData.name} додано до кошика!`); }
 function updateCartModalItemCount() { document.getElementById('cartCountModal').textContent = cart.reduce((s, i) => s + i.quantity, 0); }
-
 function showCart() {
     const cartDiv = document.getElementById('cartItems');
     if (cart.length === 0) {
@@ -621,10 +497,7 @@ function showCart() {
             return `
             <div class="cart-item-display">
                 <img src="${itemData.image || './logo.png'}" class="cart-item-image">
-                <div class="cart-item-info">
-                    <h4>${itemData.name}</h4>
-                    <p>${cartItem.quantity} x ${price.toFixed(2)} = ${itemTotal.toFixed(2)} грн</p>
-                </div>
+                <div class="cart-item-info"><h4>${itemData.name}</h4><p>${cartItem.quantity} x ${price.toFixed(2)} = ${itemTotal.toFixed(2)} грн</p></div>
                 <button class="action-button danger-button" onclick="removeCartItem(${index})">X</button>
             </div>`;
         }).join('');
@@ -633,110 +506,38 @@ function showCart() {
     }
     openModal('cartModal');
 }
-
-function removeCartItem(index) {
-    cart.splice(index, 1);
-    localStorage.setItem(`cart_${appData.currentUser.id}`, JSON.stringify(cart));
-    showCart();
-    updateCartModalItemCount();
-}
-
+function removeCartItem(index) { cart.splice(index, 1); localStorage.setItem(`cart_${appData.currentUser.id}`, JSON.stringify(cart)); showCart(); updateCartModalItemCount(); }
 function checkoutCart() {
     document.getElementById('confirmMessage').textContent = 'Підтвердити покупку?';
     confirmedActionCallback = async () => {
-        try {
-            const response = await fetchWithAuth('/api/purchase', { method: 'POST', body: JSON.stringify({ cart }), });
-            const result = await response.json();
-            alert(result.message);
-            if (response.ok) {
-                cart = [];
-                localStorage.removeItem(`cart_${appData.currentUser.id}`);
-                closeModal('cartModal');
-            }
-        } catch (e) {
-            alert('Помилка покупки.');
-        }
+        try { const response = await fetchWithAuth('/api/purchase', { method: 'POST', body: JSON.stringify({ cart }), }); const result = await response.json(); alert(result.message); if (response.ok) { cart = []; localStorage.removeItem(`cart_${appData.currentUser.id}`); closeModal('cartModal'); } } catch (e) { alert('Помилка покупки.'); }
     };
     openModal('confirmModal');
 }
-
-function showPersonalInfo() {
-    const user = appData.currentUser;
-    document.getElementById('passportName').textContent = user.full_name;
-    document.getElementById('passportDOB').textContent = user.dob || '01.01.2000';
-    document.getElementById('passportTeam').textContent = user.team_name || 'Без команди';
-    openModal('personalModal');
-    updateActiveNavButton('personal');
-}
-
+function showPersonalInfo() { const user = appData.currentUser; document.getElementById('passportName').textContent = user.full_name; document.getElementById('passportDOB').textContent = user.dob || '01.01.2000'; document.getElementById('passportTeam').textContent = user.team_name || 'Без команди'; openModal('personalModal'); updateActiveNavButton('personal'); }
 function showEventHistoryModal() {
     const list = document.getElementById('eventHistoryList');
-    if (!appData.transactions || appData.transactions.length === 0) {
-        list.innerHTML = '<p class="no-transactions">Історія порожня.</p>';
-    } else {
+    if (!appData.transactions || appData.transactions.length === 0) { list.innerHTML = '<p class="no-transactions">Історія порожня.</p>'; } else {
         list.innerHTML = appData.transactions.map(t => {
             const txDate = new Date(t.timestamp.replace(' ', 'T') + 'Z');
-            return `
-            <div class="event-item ${t.type}">
-                <h4>${getTransactionTitle(t)}</h4>
-                <p><strong>Сума:</strong> ${parseFloat(t.amount).toFixed(2)} грн</p>
-                <p><strong>Дата:</strong> ${txDate.toLocaleString('uk-UA')}</p>
-            </div>`;
+            return `<div class="event-item ${t.type}"><h4>${getTransactionTitle(t)}</h4><p><strong>Сума:</strong> ${parseFloat(t.amount).toFixed(2)} грн</p><p><strong>Дата:</strong> ${txDate.toLocaleString('uk-UA')}</p></div>`;
         }).join('');
     }
     openModal('eventHistoryModal');
 }
-
-function showQrCodeModal() {
-    const qrContainer = document.getElementById('qrcode-display');
-    qrContainer.innerHTML = '';
-    const qr = qrcode(0, 'L');
-    qr.addData(appData.currentUser.username);
-    qr.make();
-    qrContainer.innerHTML = qr.createImgTag(6, 8);
-    openModal('qrCodeModal');
-}
-
-function startQrScanner() {
-    if (!html5QrCode) html5QrCode = new Html5Qrcode("qr-reader");
-    stopQrScanner();
-    document.getElementById('qr-reader-results').style.display = 'none';
-    html5QrCode.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-            stopQrScanner();
-            document.getElementById('sendTo').value = decodedText;
-            const resultsDiv = document.getElementById('qr-reader-results');
-            resultsDiv.textContent = `✅ Знайдено: ${decodedText}.`;
-            resultsDiv.style.display = 'block';
-        },
-        (errorMessage) => { }
-    ).catch(err => console.log('QR Error:', err));
-}
-
-function stopQrScanner() {
-    if (html5QrCode && html5QrCode.getState() === 2) {
-        html5QrCode.stop().catch(err => console.log('Error', err));
-    }
-}
-
-function executeConfirmedAction() {
-    if (typeof confirmedActionCallback === 'function') confirmedActionCallback();
-    closeModal('confirmModal');
-}
-
-function updateActiveNavButton(screenName) {
-    const mapping = { 'main': 1, 'shop': 2, 'exchange': 3, 'tasks': 4, 'news': 5, 'personal': 6 };
-    document.querySelectorAll('.bottom-nav .nav-btn').forEach(b => b.classList.remove('active'));
-    const btn = document.querySelector(`.bottom-nav .nav-btn:nth-child(${mapping[screenName] || 1})`);
-    if (btn) btn.classList.add('active');
-}
-
+function showQrCodeModal() { const qrContainer = document.getElementById('qrcode-display'); qrContainer.innerHTML = ''; const qr = qrcode(0, 'L'); qr.addData(appData.currentUser.username); qr.make(); qrContainer.innerHTML = qr.createImgTag(6, 8); openModal('qrCodeModal'); }
+function startQrScanner() { if (!html5QrCode) html5QrCode = new Html5Qrcode("qr-reader"); stopQrScanner(); document.getElementById('qr-reader-results').style.display = 'none'; html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (decodedText) => { stopQrScanner(); document.getElementById('sendTo').value = decodedText; const resultsDiv = document.getElementById('qr-reader-results'); resultsDiv.textContent = `✅ Знайдено: ${decodedText}.`; resultsDiv.style.display = 'block'; }, (errorMessage) => { } ).catch(err => console.log('QR Error:', err)); }
+function stopQrScanner() { if (html5QrCode && html5QrCode.getState() === 2) { html5QrCode.stop().catch(err => console.log('Error', err)); } }
+function executeConfirmedAction() { if (typeof confirmedActionCallback === 'function') confirmedActionCallback(); closeModal('confirmModal'); }
+function updateActiveNavButton(screenName) { const mapping = { 'main': 1, 'shop': 2, 'exchange': 3, 'tasks': 4, 'news': 5, 'personal': 6 }; document.querySelectorAll('.bottom-nav .nav-btn').forEach(b => b.classList.remove('active')); const btn = document.querySelector(`.bottom-nav .nav-btn:nth-child(${mapping[screenName] || 1})`); if (btn) btn.classList.add('active'); }
 function flipCard() { document.querySelector('.card').classList.toggle('flipped'); }
 const showMainScreen = () => { document.querySelectorAll('.modal').forEach(m => closeModal(m.id)); updateActiveNavButton('main'); };
 
-// --- АДМІН-ПАНЕЛЬ ---
+// ============================================================================
+// === АДМІН-ПАНЕЛЬ (Всі функції захищено від помилок парсингу) ===
+// ============================================================================
+
+let adminData = { users: [], teams: [], shop: [], exchange: null };
 
 async function showSection(sectionId) {
     document.querySelectorAll('.main-content .section').forEach(s => s.classList.remove('active'));
@@ -765,9 +566,49 @@ async function showSection(sectionId) {
     }
 }
 
+async function loadAdminUsers() {
+    try {
+        const res = await fetchWithAuth('/api/admin/users');
+        if (!res.ok) throw new Error('Помилка авторизації');
+        adminData.users = await res.json();
+        const list = document.getElementById('userList');
+        if (list) {
+            list.innerHTML = adminData.users.map(u => `
+                <div class="data-item">
+                    <span>
+                        <strong>${u.full_name}</strong> (${u.username})<br>
+                        Баланс: ${(u.balance || 0).toFixed(2)} грн | Команда: ${u.team_name || 'Без команди'} | ${u.is_blocked ? '🔴 Заблоковано' : '🟢 Активний'}
+                    </span>
+                    <div class="button-group">
+                        <button onclick="openEditUserModal(${u.id})" class="styled-button action-btn warning">Редагувати</button>
+                        <button onclick="deleteUser(${u.id})" class="styled-button action-btn danger">Видалити</button>
+                    </div>
+                </div>`).join('');
+        }
+    } catch (e) {
+        console.error(e);
+        const list = document.getElementById('userList');
+        if (list) list.innerHTML = `<p style="color:var(--danger-color);">Сталася помилка при завантаженні користувачів.</p>`;
+    }
+}
+
+async function deleteUser(id) {
+    if (!confirm('Ви дійсно хочете назавжди видалити цього користувача? Цю дію неможливо скасувати.')) return;
+    try {
+        const r = await fetchWithAuth(`/api/admin/users/${id}`, { method: 'DELETE' });
+        if (r.ok) {
+            alert('Користувача видалено!');
+            showSection('users');
+        } else {
+            alert('Помилка видалення.');
+        }
+    } catch (e) { alert('Помилка з\'єднання.'); }
+}
+
 async function loadAdminNews() {
     try {
         const r = await fetchWithAuth('/api/news');
+        if (!r.ok) throw new Error('Error');
         const news = await r.json();
         const list = document.getElementById('adminNewsList');
         if (list) {
@@ -778,10 +619,12 @@ async function loadAdminNews() {
                 </div>`).join('');
         }
         const r2 = await fetchWithAuth('/api/admin/exchange');
-        const d = await r2.json();
-        const select = document.getElementById('newsAssetSelect');
-        if (select) {
-            select.innerHTML = '<option value="">Жодного (Просто оголошення)</option>' + d.assets.map(a => `<option value="${a.id}">${a.name} (${a.symbol})</option>`).join('');
+        if(r2.ok) {
+            const d = await r2.json();
+            const select = document.getElementById('newsAssetSelect');
+            if (select) {
+                select.innerHTML = '<option value="">Жодного (Просто оголошення)</option>' + d.assets.map(a => `<option value="${a.id}">${a.name} (${a.symbol})</option>`).join('');
+            }
         }
     } catch (e) { console.error(e); }
 }
@@ -801,21 +644,19 @@ async function createAdminNews() {
         document.getElementById('newsContent').value = '';
         document.getElementById('newsEffect').value = '';
         showSection('news');
-    } else {
-        alert('Помилка');
-    }
+    } else { alert('Помилка'); }
 }
 
 async function deleteAdminNews(id) {
     if (!confirm('Видалити новину?')) return;
     const r = await fetchWithAuth(`/api/admin/news/${id}`, { method: 'DELETE' });
-    if (r.ok) showSection('news');
-    else alert('Помилка');
+    if (r.ok) showSection('news'); else alert('Помилка');
 }
 
 async function loadAdminTasks() {
     try {
         const res = await fetchWithAuth('/api/admin/tasks');
+        if(!res.ok) throw new Error('Error');
         const tasks = await res.json();
         const list = document.getElementById('adminTasksList');
         if (list) {
@@ -851,16 +692,13 @@ async function createAdminTask() {
         document.getElementById('newTaskDesc').value = '';
         document.getElementById('newTaskReward').value = '';
         showSection('tasks');
-    } else {
-        alert('Помилка');
-    }
+    } else { alert('Помилка'); }
 }
 
 async function deleteAdminTask(id) {
     if (!confirm('Видалити завдання?')) return;
     const r = await fetchWithAuth(`/api/admin/tasks/${id}`, { method: 'DELETE' });
-    if (r.ok) showSection('tasks');
-    else alert('Помилка');
+    if (r.ok) showSection('tasks'); else alert('Помилка');
 }
 
 async function rewardUserTask() {
@@ -871,41 +709,7 @@ async function rewardUserTask() {
     if (!data.userId || !data.taskId) return alert('Оберіть користувача та завдання!');
     const r = await fetchWithAuth('/api/admin/tasks/reward', { method: 'POST', body: JSON.stringify(data) });
     const result = await r.json();
-    if (r.ok) {
-        alert('Винагороду успішно нараховано!');
-    } else {
-        alert(result.message || 'Помилка');
-    }
-}
-
-async function loadAdminUsers() {
-    try {
-        const res = await fetchWithAuth('/api/admin/users');
-        adminData.users = await res.json();
-        const list = document.getElementById('userList');
-        if (list) {
-            list.innerHTML = adminData.users.map(u => `
-                <div class="data-item">
-                    <span><strong>${u.full_name}</strong> (${u.username}) | Баланс: ${u.balance.toFixed(2)} грн | ${u.team_name || 'Без команди'} | ${u.is_blocked ? '🔴 Заблоковано' : '🟢 Активний'}</span>
-                    <div class="button-group">
-                        <button onclick="openEditUserModal(${u.id})" class="styled-button action-btn warning">Редагувати</button>
-                        <button onclick="deleteUser(${u.id})" class="styled-button action-btn danger">Видалити</button>
-                    </div>
-                </div>`).join('');
-        }
-    } catch (e) { console.error(e); }
-}
-
-async function deleteUser(id) {
-    if (!confirm('Ви дійсно хочете назавжди видалити цього користувача? Цю дію неможливо скасувати.')) return;
-    try {
-        const r = await fetchWithAuth(`/api/admin/users/${id}`, { method: 'DELETE' });
-        if (r.ok) {
-            showSection('users');
-        } else {
-            alert('Помилка видалення.');
-        }
-    } catch (e) { alert('Помилка з\'єднання.'); }
+    if (r.ok) { alert('Винагороду успішно нараховано!'); } else { alert(result.message || 'Помилка'); }
 }
 
 async function createUser() {
@@ -917,13 +721,8 @@ async function createUser() {
         dob: document.getElementById('newDob').value || '01.01.2000',
     };
     const response = await fetchWithAuth('/api/admin/users', { method: 'POST', body: JSON.stringify(user) });
-    if (response.ok) {
-        alert('Створено!');
-        showSection('users');
-    } else {
-        const r = await response.json();
-        alert(`Помилка: ${r.message}`);
-    }
+    if (response.ok) { alert('Створено!'); showSection('users'); } 
+    else { const r = await response.json(); alert(`Помилка: ${r.message}`); }
 }
 
 async function openEditUserModal(id) {
@@ -937,7 +736,7 @@ async function openEditUserModal(id) {
     document.getElementById('editFullName').value = u.full_name;
     document.getElementById('editUsername').value = u.username;
     document.getElementById('editDob').value = u.dob || '01.01.2000';
-    document.getElementById('editBalance').value = u.balance.toFixed(2);
+    document.getElementById('editBalance').value = (u.balance || 0).toFixed(2);
     document.getElementById('editBlocked').checked = u.is_blocked;
     ts.value = u.team_id || '';
     document.getElementById('editPassword').value = '';
@@ -956,31 +755,20 @@ async function saveUserChanges() {
     };
     if (!u.password) delete u.password;
     const r = await fetchWithAuth(`/api/admin/users/${currentEditUserId}`, { method: 'PUT', body: JSON.stringify(u) });
-    if (r.ok) {
-        alert('Збережено!');
-        closeModal('editUserModal');
-        showSection('users');
-    } else {
-        alert('Помилка');
-    }
+    if (r.ok) { alert('Збережено!'); closeModal('editUserModal'); showSection('users'); } else { alert('Помилка'); }
 }
 
 async function adjustBalance() {
     const d = { userId: currentEditUserId, amount: parseFloat(document.getElementById('adjustAmount').value), comment: document.getElementById('adjustComment').value };
     if (isNaN(d.amount) || !d.comment) return alert('Дані!');
     const r = await fetchWithAuth('/api/admin/users/adjust-balance', { method: 'POST', body: JSON.stringify(d) });
-    if (r.ok) {
-        alert('Оновлено!');
-        closeModal('editUserModal');
-        showSection('users');
-    } else {
-        alert('Помилка');
-    }
+    if (r.ok) { alert('Оновлено!'); closeModal('editUserModal'); showSection('users'); } else { alert('Помилка'); }
 }
 
 async function loadAdminTeamsAndUsers() {
     try {
         const [u, t] = await Promise.all([fetchWithAuth('/api/admin/users'), fetchWithAuth('/api/admin/teams')]);
+        if(!u.ok || !t.ok) throw new Error('Error');
         adminData.users = await u.json();
         adminData.teams = await t.json();
         const teamMembers = document.getElementById('teamMembers');
@@ -1003,20 +791,20 @@ async function bulkAdjustBalance() {
     const d = { teamId: document.getElementById('bulkTeamSelect').value, amount: document.getElementById('bulkAmount').value, comment: document.getElementById('bulkComment').value, action: document.getElementById('bulkAction').value };
     if (!d.teamId || !d.amount || !d.comment) return alert('Заповніть');
     const r = await fetchWithAuth('/api/admin/teams/bulk-adjust', { method: 'POST', body: JSON.stringify(d) });
-    const x = await r.json();
-    alert(x.message);
+    const x = await r.json(); alert(x.message);
     if (r.ok) showSection('teams');
 }
 
 async function loadAdminShop() {
     try {
         const r = await fetchWithAuth('/api/admin/shop-items');
+        if(!r.ok) throw new Error('Error');
         adminData.shop = await r.json();
         const list = document.getElementById('shopList');
         if (list) {
             list.innerHTML = adminData.shop.map(i => `
                 <div class="data-item">
-                    <span>${i.name} | ${i.price} грн | К-сть: ${i.quantity}</span>
+                    <span>${i.name} | ${(i.price || 0).toFixed(2)} грн | К-сть: ${i.quantity}</span>
                     <div class="button-group">
                         <button onclick="editShopItem(${i.id})" class="styled-button action-btn warning">Редагувати</button>
                         <button onclick="deleteShopItem(${i.id})" class="styled-button action-btn danger">Видалити</button>
@@ -1073,6 +861,7 @@ function clearShopForm() {
 async function loadAdminDeposits() {
     try {
         const r = await fetchWithAuth('/api/admin/deposits');
+        if(!r.ok) throw new Error('Error');
         const d = await r.json();
         const l = document.getElementById('adminDepositsList');
         if (!l) return;
@@ -1081,7 +870,7 @@ async function loadAdminDeposits() {
             const dt = new Date((x.end_time.replace(' ', 'T') + 'Z')).toLocaleString('uk-UA');
             return `
             <div class="data-item">
-                <span><strong>${x.full_name}</strong> | ${x.amount.toFixed(2)} -> <strong>${x.expected_payout.toFixed(2)}</strong> | До: ${dt}</span>
+                <span><strong>${x.full_name}</strong> | ${(x.amount || 0).toFixed(2)} -> <strong>${(x.expected_payout || 0).toFixed(2)}</strong> | До: ${dt}</span>
                 <button onclick="adminCancelDeposit(${x.id})" class="styled-button action-btn danger">Скасувати</button>
             </div>`;
         }).join('');
@@ -1097,14 +886,15 @@ async function adminCancelDeposit(id) {
 async function loadAdminExchange() {
     try {
         const res = await fetchWithAuth('/api/admin/exchange');
+        if(!res.ok) throw new Error('Error');
         adminData.exchange = await res.json();
         const list = document.getElementById('adminExchangeAssetsList');
         if (list) {
             list.innerHTML = adminData.exchange.assets.map(a => `
             <div class="data-item">
-                <span><strong>${a.symbol}</strong> - ${a.name} (${a.type}) | Ціна: ${a.price.toFixed(2)} грн</span>
+                <span><strong>${a.symbol}</strong> - ${a.name} (${a.type}) | Ціна: ${(a.price || 0).toFixed(2)} грн</span>
                 <div class="button-group" style="display:flex; align-items:center; gap:0.5rem;">
-                    <input type="number" id="adminAssetPrice_${a.id}" value="${a.price.toFixed(2)}" style="width:100px; padding:0.5rem;">
+                    <input type="number" id="adminAssetPrice_${a.id}" value="${(a.price || 0).toFixed(2)}" style="width:100px; padding:0.5rem;">
                     <input type="number" step="0.001" id="adminAssetVol_${a.id}" value="${a.volatility}" style="width:80px; padding:0.5rem;" title="Волатильність">
                     <button onclick="updateAssetPrice(${a.id})" class="styled-button action-btn warning" style="padding:0.5rem;">Змінити</button>
                 </div>
@@ -1119,7 +909,7 @@ async function loadAdminExchange() {
                     const typeText = t.type === 'buy' ? '🟢 Купив' : '🔴 Продав';
                     return `
                     <div class="data-item" style="${t.status === 'cancelled' ? 'opacity:0.5;' : ''}">
-                        <span>${dt} | <strong>${t.full_name}</strong> ${typeText} <strong>${t.amount} ${t.symbol}</strong> за ${t.total_cost.toFixed(2)} грн</span>
+                        <span>${dt} | <strong>${t.full_name}</strong> ${typeText} <strong>${t.amount} ${t.symbol}</strong> за ${(t.total_cost || 0).toFixed(2)} грн</span>
                         ${t.status === 'completed' ? `<button onclick="cancelExchangeTx(${t.id})" class="styled-button action-btn danger" style="padding:0.5rem;">Скасувати</button>` : 'Скасовано'}
                     </div>`;
                 }).join('');

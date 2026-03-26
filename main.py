@@ -44,10 +44,12 @@ async def market_simulation_task():
         try:
             if database.simulate_market_fluctuations():
                 await manager.broadcast({"type": "exchange_update_required"})
-        except Exception: pass
+        except Exception as e:
+            print("Market loop error:", e)
 
 @app.on_event("startup")
-async def startup_event(): asyncio.create_task(market_simulation_task())
+async def startup_event():
+    asyncio.create_task(market_simulation_task())
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -80,7 +82,8 @@ def verify_token(authorization: str = None) -> dict:
         return dict(user)
     except jwt.PyJWTError: raise HTTPException(status_code=403)
 
-async def get_current_user(authorization: Optional[str] = Header(None)): return verify_token(authorization)
+async def get_current_user(authorization: Optional[str] = Header(None)): 
+    return verify_token(authorization)
 
 class LoginData(BaseModel): login: str; password: str
 @app.post("/login")
@@ -93,7 +96,8 @@ def login(data: LoginData):
     return JSONResponse(status_code=401, content={"message": "Неправильний логін або пароль."})
 
 @app.get("/api/app-data")
-def get_app_data(user: dict = Depends(get_current_user)): return database.get_app_data(user["id"])
+def get_app_data(user: dict = Depends(get_current_user)): 
+    return database.get_app_data(user["id"])
 
 class TransferData(BaseModel): recipientFullName: str; amount: float; comment: str = "Приватний переказ"
 @app.post("/api/transfer")
@@ -130,11 +134,14 @@ async def exchange_buy(data: ExchangeTradeData, user: dict = Depends(get_current
         total_cost = asset["price"] * data.amount
         u = cursor.execute("SELECT balance FROM users WHERE id = ?", (user["id"],)).fetchone()
         if u["balance"] < total_cost:
-            db.rollback(); return JSONResponse(status_code=400, content={"message": f"Недостатньо коштів. Потрібно {total_cost:.2f} грн."})
+            db.rollback()
+            return JSONResponse(status_code=400, content={"message": f"Недостатньо коштів. Потрібно {total_cost:.2f} грн."})
+        
         cursor.execute("UPDATE users SET balance = balance - ? WHERE id = ?", (total_cost, user["id"]))
         port = cursor.execute("SELECT amount FROM user_portfolio WHERE user_id = ? AND asset_id = ?", (user["id"], data.assetId)).fetchone()
         if port: cursor.execute("UPDATE user_portfolio SET amount = amount + ? WHERE user_id = ? AND asset_id = ?", (data.amount, user["id"], data.assetId))
         else: cursor.execute("INSERT INTO user_portfolio (user_id, asset_id, amount) VALUES (?, ?, ?)", (user["id"], data.assetId, data.amount))
+        
         new_price = asset["price"] * (1 + asset["volatility"])
         cursor.execute("UPDATE exchange_assets SET price = ? WHERE id = ?", (new_price, data.assetId))
         cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (data.assetId, new_price))
@@ -168,10 +175,13 @@ async def exchange_sell(data: ExchangeTradeData, user: dict = Depends(get_curren
         asset = cursor.execute("SELECT * FROM exchange_assets WHERE id = ?", (data.assetId,)).fetchone()
         port = cursor.execute("SELECT amount FROM user_portfolio WHERE user_id = ? AND asset_id = ?", (user["id"], data.assetId)).fetchone()
         if not asset or not port or port["amount"] < data.amount:
-            db.rollback(); return JSONResponse(status_code=400, content={"message": "Недостатньо активу."})
+            db.rollback()
+            return JSONResponse(status_code=400, content={"message": "Недостатньо активу."})
+        
         total_revenue = asset["price"] * data.amount
         cursor.execute("UPDATE users SET balance = balance + ? WHERE id = ?", (total_revenue, user["id"]))
         cursor.execute("UPDATE user_portfolio SET amount = amount - ? WHERE user_id = ? AND asset_id = ?", (data.amount, user["id"], data.assetId))
+        
         new_price = max(0.01, asset["price"] * (1 - asset["volatility"]))
         cursor.execute("UPDATE exchange_assets SET price = ? WHERE id = ?", (new_price, data.assetId))
         cursor.execute("INSERT INTO price_history (asset_id, price) VALUES (?, ?)", (data.assetId, new_price))
@@ -268,6 +278,138 @@ async def admin_reward_task(data: AdminRewardTaskData, user: dict = Depends(get_
         return {"success": True}
     except Exception as e:
         db.rollback(); return JSONResponse(status_code=400, content={"message": str(e)})
+
+@app.get("/api/admin/users")
+def admin_get_users(user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    users = db.execute("SELECT u.id, u.username, u.full_name, u.dob, u.balance, u.is_blocked, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.is_admin = 0 ORDER BY u.full_name").fetchall()
+    return [dict(u) for u in users]
+
+class UserCreateData(BaseModel): username: str; password: str; fullName: str; dob: Optional[str] = None; balance: float = 100
+@app.post("/api/admin/users")
+async def admin_create_user(data: UserCreateData, user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    try: 
+        cursor = db.cursor()
+        cursor.execute('INSERT INTO users (username, password_hash, full_name, dob, balance) VALUES (?, ?, ?, ?, ?)', (data.username, database.simple_hash(data.password), data.fullName, data.dob, data.balance))
+        db.commit()
+        await manager.broadcast({"type": "admin_panel_update_required"})
+        return JSONResponse(status_code=201, content={"id": cursor.lastrowid})
+    except database.sqlite3.IntegrityError: return JSONResponse(status_code=409, content={"message": "Користувач вже існує."})
+
+class UserUpdateData(BaseModel): username: str; fullName: str; dob: Optional[str] = None; balance: float; is_blocked: bool; team_id: Optional[int] = None; password: Optional[str] = None
+@app.put("/api/admin/users/{user_id}")
+async def admin_update_user(user_id: int, data: UserUpdateData, user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    sql = 'UPDATE users SET username = ?, full_name = ?, dob = ?, balance = ?, is_blocked = ?, team_id = ?'
+    params = [data.username, data.fullName, data.dob, data.balance, 1 if data.is_blocked else 0, data.team_id]
+    if data.password: 
+        sql += ', password_hash = ?'
+        params.append(database.simple_hash(data.password))
+    sql += ' WHERE id = ?'
+    params.append(user_id)
+    db.execute(sql, tuple(params))
+    db.commit()
+    await manager.broadcast({"type": "admin_panel_update_required"})
+    await manager.broadcast({"type": "full_update_required"}, [user_id])
+    return {"success": True}
+
+# --- НОВИЙ РОУТ ДЛЯ ВИДАЛЕННЯ КОРИСТУВАЧА ---
+@app.delete("/api/admin/users/{user_id}")
+async def admin_delete_user(user_id: int, user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    db.commit()
+    await manager.broadcast({"type": "admin_panel_update_required"})
+    return {"success": True}
+
+class AdjustBalanceData(BaseModel): userId: int; amount: float; comment: str
+@app.post("/api/admin/users/adjust-balance")
+async def admin_adjust_balance(data: AdjustBalanceData, current_user: dict = Depends(get_current_user)): 
+    if not current_user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    database.adjust_balance(data.userId, data.amount, data.comment, current_user["full_name"])
+    await manager.broadcast({"type": "admin_panel_update_required"})
+    await manager.broadcast({"type": "full_update_required"}, [data.userId])
+    return {"success": True}
+
+@app.get("/api/admin/teams")
+def admin_get_teams(user: dict = Depends(get_current_user)): 
+    return [dict(t) for t in database.get_db().execute('SELECT * FROM teams').fetchall()]
+
+class TeamCreateData(BaseModel): name: str; members: List[int] = []
+@app.post("/api/admin/teams")
+async def admin_create_team(data: TeamCreateData, user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    try: 
+        cursor = db.cursor()
+        cursor.execute('INSERT INTO teams (name) VALUES (?)', (data.name,))
+        team_id = cursor.lastrowid
+        for m in data.members: cursor.execute('UPDATE users SET team_id = ? WHERE id = ?', (team_id, m))
+        db.commit()
+        await manager.broadcast({"type": "admin_panel_update_required"})
+        return JSONResponse(status_code=201, content={"id": team_id})
+    except database.sqlite3.IntegrityError: return JSONResponse(status_code=409, content={"message": "Команда вже існує."})
+
+class BulkAdjustData(BaseModel): teamId: int; amount: float; comment: str; action: str
+@app.post("/api/admin/teams/bulk-adjust")
+async def admin_bulk_adjust(data: BulkAdjustData, current_user: dict = Depends(get_current_user)):
+    if not current_user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    final_amount = data.amount if data.action == 'add' else -data.amount
+    db = database.get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("BEGIN TRANSACTION")
+        users_in_team = cursor.execute('SELECT id FROM users WHERE team_id = ?', (data.teamId,)).fetchall()
+        if not users_in_team: 
+            db.rollback(); return JSONResponse(status_code=400, content={"message": "Команда порожня."})
+        updated_ids = []
+        for u in users_in_team: 
+            cursor.execute('UPDATE users SET balance = balance + ? WHERE id = ?', (final_amount, u["id"]))
+            cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (u["id"], 'admin_adjustment', final_amount, f"Масово ({current_user['full_name']})", data.comment))
+            updated_ids.append(u["id"])
+        db.commit()
+        await manager.broadcast({"type": "admin_panel_update_required"})
+        await manager.broadcast({"type": "full_update_required"}, updated_ids)
+        return {"success": True, "message": f"Оновлено {len(updated_ids)} учасників."}
+    except Exception as e: 
+        db.rollback(); return JSONResponse(status_code=400, content={"message": str(e)})
+
+@app.get("/api/admin/shop-items")
+def admin_get_shop_items(user: dict = Depends(get_current_user)): 
+    return [dict(i) for i in database.get_db().execute('SELECT * FROM shop_items ORDER BY name').fetchall()]
+
+class ShopItemData(BaseModel): name: str; price: float; discountPrice: Optional[float] = None; quantity: int; category: str; description: str; image: str
+@app.post("/api/admin/shop-items")
+async def admin_create_shop_item(data: ShopItemData, user: dict = Depends(get_current_user)):
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db(); cursor = db.cursor()
+    cursor.execute('''INSERT INTO shop_items (name, price, discount_price, quantity, category, description, image) VALUES (?, ?, ?, ?, ?, ?, ?)''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image))
+    db.commit()
+    await manager.broadcast({"type": "shop_update_required"})
+    return JSONResponse(status_code=201, content={"id": cursor.lastrowid})
+
+@app.put("/api/admin/shop-items/{item_id}")
+async def admin_update_shop_item(item_id: int, data: ShopItemData, user: dict = Depends(get_current_user)): 
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    db.execute('''UPDATE shop_items SET name = ?, price = ?, discount_price = ?, quantity = ?, category = ?, description = ?, image = ? WHERE id = ?''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image, item_id))
+    db.commit()
+    await manager.broadcast({"type": "shop_update_required"})
+    return {"success": True}
+
+@app.delete("/api/admin/shop-items/{item_id}")
+async def admin_delete_shop_item(item_id: int, user: dict = Depends(get_current_user)): 
+    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
+    db = database.get_db()
+    db.execute('DELETE FROM shop_items WHERE id = ?', (item_id,))
+    db.commit()
+    await manager.broadcast({"type": "shop_update_required"})
+    return {"success": True}
 
 @app.get("/api/admin/exchange")
 def admin_get_exchange(user: dict = Depends(get_current_user)):
@@ -379,109 +521,6 @@ async def purchase(data: PurchaseData, user: dict = Depends(get_current_user)):
         await manager.broadcast({"type": "shop_update_required"})
         return {"success": True, "message": f"Оформлено на {total_cost:.2f} грн."}
     except Exception as e: db.rollback(); return JSONResponse(status_code=400, content={"message": str(e)})
-
-@app.get("/api/admin/users")
-def admin_get_users(user: dict = Depends(get_current_user)): return [dict(u) for u in database.get_db().execute("SELECT u.id, u.username, u.full_name, u.dob, u.balance, u.is_blocked, u.team_id, t.name as team_name FROM users u LEFT JOIN teams t ON u.team_id = t.id WHERE u.is_admin = 0 ORDER BY u.full_name").fetchall()]
-class UserCreateData(BaseModel): username: str; password: str; fullName: str; dob: Optional[str] = None; balance: float = 100
-@app.post("/api/admin/users")
-async def admin_create_user(data: UserCreateData, user: dict = Depends(get_current_user)):
-    db = database.get_db()
-    try: 
-        cursor = db.cursor()
-        cursor.execute('INSERT INTO users (username, password_hash, full_name, dob, balance) VALUES (?, ?, ?, ?, ?)', (data.username, database.simple_hash(data.password), data.fullName, data.dob, data.balance))
-        db.commit()
-        await manager.broadcast({"type": "admin_panel_update_required"})
-        return JSONResponse(status_code=201, content={"id": cursor.lastrowid})
-    except database.sqlite3.IntegrityError: return JSONResponse(status_code=409, content={"message": "Користувач вже існує."})
-
-class UserUpdateData(BaseModel): username: str; fullName: str; dob: Optional[str] = None; balance: float; is_blocked: bool; team_id: Optional[int] = None; password: Optional[str] = None
-@app.put("/api/admin/users/{user_id}")
-async def admin_update_user(user_id: int, data: UserUpdateData, user: dict = Depends(get_current_user)):
-    db = database.get_db(); sql = 'UPDATE users SET username = ?, full_name = ?, dob = ?, balance = ?, is_blocked = ?, team_id = ?'; params = [data.username, data.fullName, data.dob, data.balance, 1 if data.is_blocked else 0, data.team_id]
-    if data.password: sql += ', password_hash = ?'; params.append(database.simple_hash(data.password))
-    sql += ' WHERE id = ?'; params.append(user_id); db.execute(sql, tuple(params)); db.commit()
-    await manager.broadcast({"type": "admin_panel_update_required"})
-    await manager.broadcast({"type": "full_update_required"}, [user_id])
-    return {"success": True}
-
-@app.delete("/api/admin/users/{user_id}")
-async def admin_delete_user(user_id: int, user: dict = Depends(get_current_user)):
-    if not user.get("is_admin"): return JSONResponse(status_code=403, content={})
-    db = database.get_db()
-    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    db.commit()
-    await manager.broadcast({"type": "admin_panel_update_required"})
-    return {"success": True}
-
-class AdjustBalanceData(BaseModel): userId: int; amount: float; comment: str
-@app.post("/api/admin/users/adjust-balance")
-async def admin_adjust_balance(data: AdjustBalanceData, current_user: dict = Depends(get_current_user)): 
-    database.adjust_balance(data.userId, data.amount, data.comment, current_user["full_name"])
-    await manager.broadcast({"type": "admin_panel_update_required"})
-    await manager.broadcast({"type": "full_update_required"}, [data.userId])
-    return {"success": True}
-
-@app.get("/api/admin/teams")
-def admin_get_teams(user: dict = Depends(get_current_user)): return [dict(t) for t in database.get_db().execute('SELECT * FROM teams').fetchall()]
-class TeamCreateData(BaseModel): name: str; members: List[int] = []
-@app.post("/api/admin/teams")
-async def admin_create_team(data: TeamCreateData, user: dict = Depends(get_current_user)):
-    db = database.get_db()
-    try: 
-        cursor = db.cursor()
-        cursor.execute('INSERT INTO teams (name) VALUES (?)', (data.name,))
-        team_id = cursor.lastrowid
-        for m in data.members: cursor.execute('UPDATE users SET team_id = ? WHERE id = ?', (team_id, m))
-        db.commit()
-        await manager.broadcast({"type": "admin_panel_update_required"})
-        return JSONResponse(status_code=201, content={"id": team_id})
-    except database.sqlite3.IntegrityError: return JSONResponse(status_code=409, content={"message": "Команда вже існує."})
-
-class BulkAdjustData(BaseModel): teamId: int; amount: float; comment: str; action: str
-@app.post("/api/admin/teams/bulk-adjust")
-async def admin_bulk_adjust(data: BulkAdjustData, current_user: dict = Depends(get_current_user)):
-    final_amount = data.amount if data.action == 'add' else -data.amount; db = database.get_db(); cursor = db.cursor()
-    try:
-        cursor.execute("BEGIN TRANSACTION")
-        users_in_team = cursor.execute('SELECT id FROM users WHERE team_id = ?', (data.teamId,)).fetchall()
-        if not users_in_team: db.rollback(); return JSONResponse(status_code=400, content={"message": "Команда порожня."})
-        updated_ids = []
-        for u in users_in_team: 
-            cursor.execute('UPDATE users SET balance = balance + ? WHERE id = ?', (final_amount, u["id"]))
-            cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (u["id"], 'admin_adjustment', final_amount, f"Масово ({current_user['full_name']})", data.comment))
-            updated_ids.append(u["id"])
-        db.commit()
-        await manager.broadcast({"type": "admin_panel_update_required"})
-        await manager.broadcast({"type": "full_update_required"}, updated_ids)
-        return {"success": True, "message": f"Оновлено {len(updated_ids)} учасників."}
-    except Exception as e: db.rollback(); return JSONResponse(status_code=400, content={"message": str(e)})
-
-@app.get("/api/admin/shop-items")
-def admin_get_shop_items(user: dict = Depends(get_current_user)): return [dict(i) for i in database.get_db().execute('SELECT * FROM shop_items ORDER BY name').fetchall()]
-class ShopItemData(BaseModel): name: str; price: float; discountPrice: Optional[float] = None; quantity: int; category: str; description: str; image: str
-@app.post("/api/admin/shop-items")
-async def admin_create_shop_item(data: ShopItemData, user: dict = Depends(get_current_user)):
-    db = database.get_db(); cursor = db.cursor()
-    cursor.execute('''INSERT INTO shop_items (name, price, discount_price, quantity, category, description, image) VALUES (?, ?, ?, ?, ?, ?, ?)''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image))
-    db.commit()
-    await manager.broadcast({"type": "shop_update_required"})
-    return JSONResponse(status_code=201, content={"id": cursor.lastrowid})
-
-@app.put("/api/admin/shop-items/{item_id}")
-async def admin_update_shop_item(item_id: int, data: ShopItemData, user: dict = Depends(get_current_user)): 
-    db = database.get_db()
-    db.execute('''UPDATE shop_items SET name = ?, price = ?, discount_price = ?, quantity = ?, category = ?, description = ?, image = ? WHERE id = ?''', (data.name, data.price, data.discountPrice, data.quantity, data.category, data.description, data.image, item_id))
-    db.commit()
-    await manager.broadcast({"type": "shop_update_required"})
-    return {"success": True}
-
-@app.delete("/api/admin/shop-items/{item_id}")
-async def admin_delete_shop_item(item_id: int, user: dict = Depends(get_current_user)): 
-    db = database.get_db()
-    db.execute('DELETE FROM shop_items WHERE id = ?', (item_id,))
-    db.commit()
-    await manager.broadcast({"type": "shop_update_required"})
-    return {"success": True}
 
 @app.get("/api/admin/db/download")
 def download_database(user: dict = Depends(get_current_user)):
