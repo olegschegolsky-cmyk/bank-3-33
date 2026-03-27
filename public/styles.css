@@ -121,6 +121,7 @@ body {
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 .card-logo { width: 50px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); }
 .card-type { font-weight: 700; font-size: 0.9rem; opacity: 0.9; letter-spacing: 2px; }
+.card-chip { width: 45px; height: 35px; background: linear-gradient(135deg, #e2e2e2, #9ca3af); border-radius: 6px; margin-top: 1rem; box-shadow: inset 0 0 5px rgba(0,0,0,0.3); }
 .card-number { 
   font-size: 1.4rem; 
   letter-spacing: 4px; 
