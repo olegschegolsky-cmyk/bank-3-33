@@ -93,18 +93,75 @@ def initialize_db():
     try: cursor.execute("ALTER TABLE users ADD COLUMN dob TEXT DEFAULT '01.01.2000'")
     except sqlite3.OperationalError: pass
     
+    # Створення адміна
     admin_user = cursor.execute('SELECT id FROM users WHERE username = ?', ('admin',)).fetchone()
     if not admin_user:
         cursor.execute('INSERT INTO users (username, password_hash, full_name, is_admin, balance) VALUES (?, ?, ?, ?, ?)', ('admin', simple_hash('admin123'), 'Головний Адміністратор', 1, 999999))
     
+    # --- АВТОМАТИЧНЕ ДОДАВАННЯ КОРИСТУВАЧІВ ---
+    users_to_create = [
+        {'username': 'user1', 'fullName': 'Бицюк Ярослав', 'password': 'Yaroslav7xK'},
+        {'username': 'user2', 'fullName': 'Борович Роман', 'password': 'Roman2mP'},
+        {'username': 'user3', 'fullName': 'Будзан Остап', 'password': 'Ostap9vL'},
+        {'username': 'user4', 'fullName': 'Бурак Маркіян', 'password': 'Markiian4bN'},
+        {'username': 'user5', 'fullName': 'Вотінцев Владислав', 'password': 'Vladyslav8cR'},
+        {'username': 'user6', 'fullName': 'Городечна Анна', 'password': 'Anna3zT'},
+        {'username': 'user7', 'fullName': 'Грет Маркіян', 'password': 'Markiian5fW'},
+        {'username': 'user8', 'fullName': 'Грет Матвій', 'password': 'Matvii2kQ'},
+        {'username': 'user9', 'fullName': 'Грищук Настя', 'password': 'Nastia8jD'},
+        {'username': 'user10', 'fullName': 'Грищук Наташа', 'password': 'Natasha4hM'},
+        {'username': 'user11', 'fullName': 'Ґудзик Ліза', 'password': 'Liza9pB'},
+        {'username': 'user12', 'fullName': 'Ґудзик Тимофій', 'password': 'Tymofii3xC'},
+        {'username': 'user13', 'fullName': 'Демидівка Богдан', 'password': 'Bohdan6nV'},
+        {'username': 'user14', 'fullName': 'Дяків Андрій', 'password': 'Andrii7gL'},
+        {'username': 'user15', 'fullName': 'Дяків Каріна', 'password': 'Karina2mW'},
+        {'username': 'user16', 'fullName': 'Емха Устина', 'password': 'Ustyna5kR'},
+        {'username': 'user17', 'fullName': 'Задорожний Андрій', 'password': 'Andrii9tP'},
+        {'username': 'user18', 'fullName': 'Задорожний Назар', 'password': 'Nazar4bC'},
+        {'username': 'user19', 'fullName': 'Заремба Дмитро', 'password': 'Dmytro8xN'},
+        {'username': 'user20', 'fullName': 'Заремба Евеліна', 'password': 'Evelina3vF'},
+        {'username': 'user21', 'fullName': 'Козловський Ігор', 'password': 'Ihor7jD'},
+        {'username': 'user22', 'fullName': 'Костецький Михайло', 'password': 'Mykhailo2qL'},
+        {'username': 'user23', 'fullName': 'Кривець Олексій', 'password': 'Oleksii6cW'},
+        {'username': 'user24', 'fullName': 'Лилк Ігор', 'password': 'Ihor9mB'},
+        {'username': 'user25', 'fullName': 'Новікова Анастасія', 'password': 'Anastasiia4hK'},
+        {'username': 'user26', 'fullName': 'Округін Матвій', 'password': 'Matvii8pT'},
+        {'username': 'user27', 'fullName': 'Округіна Віра', 'password': 'Vira5nR'},
+        {'username': 'user28', 'fullName': 'Округіна Надія', 'password': 'Nadiia2fV'},
+        {'username': 'user29', 'fullName': 'Радкевич Майя', 'password': 'Maia7xM'},
+        {'username': 'user30', 'fullName': 'Реуцький Ілля', 'password': 'Illia3bQ'},
+        {'username': 'user31', 'fullName': 'Реуцький Микита', 'password': 'Mykyta9kL'},
+        {'username': 'user32', 'fullName': 'Риби Марко', 'password': 'Marko4zC'},
+        {'username': 'user33', 'fullName': 'Риби Матвій', 'password': 'Matvii6vN'},
+        {'username': 'user34', 'fullName': 'Струк Дмитро', 'password': 'Dmytro2jP'},
+        {'username': 'user35', 'fullName': 'Фурльовська Христина', 'password': 'Khrystyna8mF'},
+        {'username': 'user36', 'fullName': 'Фурльовський Марк', 'password': 'Mark5tW'},
+        {'username': 'user37', 'fullName': 'Фурльовський Маркіян', 'password': 'Markiian9cL'},
+        {'username': 'user38', 'fullName': 'Чума Ярослав', 'password': 'Yaroslav3rD'}
+    ]
+
+    for u in users_to_create:
+        if not cursor.execute('SELECT id FROM users WHERE username = ?', (u['username'],)).fetchone():
+            cursor.execute('INSERT INTO users (username, password_hash, full_name, balance) VALUES (?, ?, ?, 100.0)', 
+                           (u['username'], simple_hash(u['password']), u['fullName']))
+
+    # Створення біржі
     initial_assets = [('Bitcoin', 'BTC', 'crypto', 1500.0, 0.02), ('CEO Coin', 'CEO', 'crypto', 10.0, 0.05), ('Apple', 'AAPL', 'stock', 300.0, 0.01), ('Tesla', 'TSLA', 'stock', 250.0, 0.015)]
     for asset in initial_assets:
         if not cursor.execute('SELECT id FROM exchange_assets WHERE symbol = ?', (asset[1],)).fetchone():
             cursor.execute('INSERT INTO exchange_assets (name, symbol, type, price, volatility) VALUES (?, ?, ?, ?, ?)', asset)
             cursor.execute('INSERT INTO price_history (asset_id, price) VALUES (?, ?)', (cursor.lastrowid, asset[3]))
 
-    # Видаляємо стандартні завдання з панелі адміна, щоб вони не дублювалися і працювали автоматично
-    cursor.execute("DELETE FROM admin_tasks WHERE title IN ('Перший депозит', 'Перший переказ', 'Купити акції', 'Купити криптовалюту')")
+    # Створення стандартних завдань
+    if cursor.execute('SELECT COUNT(*) FROM admin_tasks').fetchone()[0] == 0:
+        default_tasks = [
+            ('Перший депозит', 'Покладіть кошти на депозит (від 150 грн).', 100),
+            ('Перший переказ', 'Надішліть кошти іншому користувачу (від 100 грн).', 200),
+            ('Купити акції', 'Придбайте акції на біржі (від 3 шт).', 180),
+            ('Купити криптовалюту', 'Придбайте криптовалюту на біржі (від 3 шт).', 120)
+        ]
+        for t in default_tasks:
+            cursor.execute('INSERT INTO admin_tasks (title, description, reward) VALUES (?, ?, ?)', t)
 
     db.commit()
 
@@ -166,13 +223,6 @@ def perform_transfer(from_user_id: int, to_user_id: int, amount: float, comment:
         to_user_name = cursor.execute('SELECT full_name FROM users WHERE id = ?', (to_user_id,)).fetchone()['full_name']
         cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (from_user_id, 'transfer', -amount, to_user_name, comment))
         cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (to_user_id, 'transfer', amount, from_user['full_name'], comment))
-        
-        # АВТО-ЗАВДАННЯ: Переказ
-        if amount >= 100 and not cursor.execute("SELECT id FROM completed_tasks WHERE user_id = ? AND task_key = 'auto_transfer'", (from_user_id,)).fetchone():
-            cursor.execute("INSERT INTO completed_tasks (user_id, task_key) VALUES (?, 'auto_transfer')", (from_user_id,))
-            cursor.execute("UPDATE users SET balance = balance + 200 WHERE id = ?", (from_user_id,))
-            cursor.execute("INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, 'task_reward', 200, 'Система', 'Нагорода за завдання: Перший переказ')", (from_user_id,))
-            
         db.commit(); return {"success": True, "message": "Переказ успішний"}
     except Exception as e: db.rollback(); raise e
 
@@ -197,13 +247,6 @@ def create_deposit(user_id: int, amount: float, days: int):
         cursor.execute('UPDATE users SET balance = balance - ? WHERE id = ?', (amount, user_id))
         cursor.execute('''INSERT INTO deposits (user_id, amount, expected_payout, end_time) VALUES (?, ?, ?, datetime('now', ?))''', (user_id, amount, payout, f'+{days} days'))
         cursor.execute('INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, ?, ?, ?, ?)', (user_id, 'deposit', -amount, 'Банк', f'Депозит на {days} дн.'))
-        
-        # АВТО-ЗАВДАННЯ: Депозит
-        if amount >= 150 and not cursor.execute("SELECT id FROM completed_tasks WHERE user_id = ? AND task_key = 'auto_deposit'", (user_id,)).fetchone():
-            cursor.execute("INSERT INTO completed_tasks (user_id, task_key) VALUES (?, 'auto_deposit')", (user_id,))
-            cursor.execute("UPDATE users SET balance = balance + 100 WHERE id = ?", (user_id,))
-            cursor.execute("INSERT INTO transactions (user_id, type, amount, counterparty, comment) VALUES (?, 'task_reward', 100, 'Система', 'Нагорода за завдання: Перший депозит')", (user_id,))
-            
         db.commit(); return {"success": True, "message": "Депозит відкрито."}
     except Exception as e: db.rollback(); raise e
 
